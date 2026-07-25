@@ -18,7 +18,6 @@ use Webrtc\Srtp\Exception\SrtpException;
 use Webrtc\Srtp\Exception\SrtpValidateException;
 use Webrtc\Srtp\Policy;
 use Webrtc\Srtp\Session;
-use Webrtc\Srtp\Srtp as libSrtp;
 
 /**
  * Srtp Class
@@ -82,7 +81,6 @@ class Srtp
      */
     public function __construct()
     {
-        libSrtp::init();
     }
 
     /**
@@ -113,7 +111,6 @@ class Srtp
      */
     public static function getProfiles(): array
     {
-        libSrtp::init();
         $profiles = [];
         foreach (self::DEFAULT_PROFILES as $profile) {
             if (self::checkAvailabilityProfile($profile)) {

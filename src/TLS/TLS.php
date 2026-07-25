@@ -20,8 +20,6 @@ use Webrtc\DTLS\Srtp;
 use Webrtc\ICE\RTCIceTransportInterface;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
 use Webrtc\Srtp\Exception\SrtpException;
-use Webrtc\SSL\Crypto\PrivateKeyInterface;
-use Webrtc\SSL\Crypto\X509;
 use Webrtc\SSL\Enum\BioMethod;
 use Webrtc\SSL\Enum\ContextMethod;
 use Webrtc\SSL\Enum\Verify;
@@ -32,7 +30,6 @@ use Webrtc\SSL\Exception\WantReadException;
 use Webrtc\SSL\Exception\WantWriteException;
 use Webrtc\SSL\Exception\WantX509LookupException;
 use Webrtc\SSL\Exception\ZeroReturnException;
-use Webrtc\SSL\OpenSSL;
 use Webrtc\SSL\SSL\BIO;
 use Webrtc\SSL\SSL\BIOInterface;
 use Webrtc\SSL\SSL\Context;
@@ -103,7 +100,6 @@ class TLS
      */
     public function __construct(private readonly RTCCertificate $certificate)
     {
-        OpenSSL::init();
         $this->context = $this->createContext();
         $this->bio = $this->createBIO();
         $this->ssl = $this->createSSL();
@@ -345,18 +341,7 @@ class TLS
      */
     private function setCertAndPrivateKey(Context $ctx): void
     {
-        $certificate = $this->certificate->getCertificate();
-        $privateKey = $this->certificate->getPrivateKey();
-
-        if ($certificate instanceof X509 && $privateKey instanceof PrivateKeyInterface) {
-            $ctx->useCertificate($certificate);
-            $ctx->usePrivateKey($privateKey);
-        } elseif (is_string($certificate) && is_string($privateKey)) {
-            $ctx->useCertificateFile($certificate);
-            $ctx->usePrivateKeyFile($privateKey);
-        }
-
-        $ctx->checkPrivateKey();
+        $ctx->setCertificate($this->certificate);
     }
 
     /**

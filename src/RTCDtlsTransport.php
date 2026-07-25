@@ -447,6 +447,9 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
         $srtp = new Srtp();
 
         $selectedProfile = $srtp->getProfile($this->tls->getSelectedSrtpProfile());
+        if ($selectedProfile === false) {
+            throw new SrtpException('The DTLS handshake did not negotiate any usable SRTP profile!');
+        }
         $srtpKeyMaterial = $this->tls->exportKeyingMaterial($selectedProfile["keyLength"], $selectedProfile["saltLent"]);
 
         $isServer = $this->transport->getRole() === IceRole::Controlling;

@@ -1,7 +1,7 @@
 <?php
 
 /**
- * This file is part of the PHP WebRTC package.
+ * This file is part of the PHP WebRTC package, vendored and modified for MadelineProto.
  *
  * (c) Amin Yazdanpanah <https://www.aminyazdanpanah.com/#contact>
  *
@@ -11,17 +11,13 @@
 
 namespace Webrtc\DTLS;
 
-use DateInterval;
-use DateInvalidOperationException;
-use DateTimeImmutable;
 use Webrtc\DTLS\Exception\RTCCertificateException;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
-use Webrtc\SSL\Crypto\EC\EC;
-use Webrtc\SSL\Crypto\PrivateKeyInterface;
-use Webrtc\SSL\Crypto\X509;
-use Webrtc\SSL\Enum\ECCurveName;
-use Webrtc\SSL\Exception\OpenSSLException;
-use Webrtc\SSL\OpenSSL;
+use DateTimeImmutable;
+use phpseclib3\Crypt\EC;
+use phpseclib3\Crypt\EC\PrivateKey;
+use phpseclib3\File\X509;
+use Throwable;
 
 /**
  * Class RTCCertificate
@@ -29,8 +25,12 @@ use Webrtc\SSL\OpenSSL;
  * Represents a certificate used by an RTCDtlsTransport for WebRTC communications.
  * This class handles certificate generation, management, and fingerprinting for DTLS connections.
  *
+ * Upstream this was generated through OpenSSL's FFI bindings; it now uses phpseclib3, so that a
+ * plain PHP installation with no extra extensions can take part in calls. WebRTC certificates are
+ * self-signed and pinned by fingerprint, so no chain of trust is involved.
+ *
  * The certificate can be either:
- * - Generated automatically with EC secp256r1 private key (default behavior)
+ * - Generated automatically with an EC secp256r1 private key (default behavior)
  * - Loaded from existing certificate and private key files
  *
  * @package Webrtc\DTLS
@@ -44,40 +44,38 @@ class RTCCertificate
     private const string STATE = "Virginia";
 
     /** @var string Default city for a certificate subject */
-    private const string CITY = "Fairfax";
+    private const string CITY = "Reston";
 
-    /** @var string Default organization for certificate subject */
-    private const string ORGANIZATION = "Quasar Stream";
+    /** @var string Default organization for a certificate subject */
+    private const string ORGANIZATION = "PHP WebRTC";
 
     /** @var string Default common name for a certificate subject */
-    private const string ORGANIZATION_WEBSITE = "QuasarStream.com";
+    private const string ORGANIZATION_WEBSITE = "webrtc.php";
 
-    /** @var PrivateKeyInterface|string The private key (either as object or file path) */
-    private PrivateKeyInterface|string $privateKey;
+    /** How long the generated certificate stays valid. */
+    private const string VALIDITY = '+30 days';
 
-    /** @var X509|string The certificate (either as X509 object or file path) */
-    private X509|string $certificate;
+    private PrivateKey $privateKey;
 
-    /** @var X509 The X509 certificate object */
-    private X509 $x509;
+    /** The certificate in PEM form. */
+    private string $certificate;
+
+    /** The certificate in DER form, which is what goes on the wire and gets fingerprinted. */
+    private string $der;
+
+    private DateTimeImmutable $expires;
 
     /**
      * RTCCertificate constructor.
      *
-     * Initializes the certificate either from provided files or by generating a new one.
-     *
      * @param string|null $privateKey Path to an existing private key file (PEM format)
      * @param string|null $certificate Path to an existing certificate file (PEM format)
      *
-     * @throws RTCCertificateException If provided files don't exist or are invalid
-     * @throws OpenSSLException If OpenSSL operations fail
-     * @throws DateInvalidOperationException
+     * @throws RTCCertificateException If provided files don't exist or are invalid.
      */
     public function __construct(?string $privateKey = null, ?string $certificate = null)
     {
-        OpenSSL::init();
-
-        if ($privateKey && $certificate) {
+        if ($privateKey !== null && $certificate !== null) {
             if (!is_file($privateKey) || !is_file($certificate)) {
                 throw new RTCCertificateException(sprintf(
                     "Either the private key file or the certificate file (or both) does not exist. Private key path: %s, Certificate path: %s",
@@ -85,131 +83,161 @@ class RTCCertificate
                     $certificate
                 ));
             }
-            $this->privateKey = $privateKey;
-            $this->certificate = $certificate;
-            $this->x509 = X509::loadFile($certificate);
+            $this->load((string) file_get_contents($privateKey), (string) file_get_contents($certificate));
         } else {
             $this->generate();
         }
     }
 
     /**
+     * @throws RTCCertificateException If the key or certificate cannot be parsed.
+     */
+    private function load(string $privateKey, string $certificate): void
+    {
+        try {
+            $key = EC::loadPrivateKey($privateKey);
+        } catch (Throwable $e) {
+            throw new RTCCertificateException('Could not load the private key: '.$e->getMessage(), 0, $e);
+        }
+        if (!$key instanceof PrivateKey) {
+            throw new RTCCertificateException('The provided key is not an EC private key!');
+        }
+        $this->privateKey = $key;
+
+        $x509 = new X509;
+        $parsed = $x509->loadX509($certificate);
+        if ($parsed === false) {
+            throw new RTCCertificateException('Could not parse the certificate!');
+        }
+        $this->certificate = $certificate;
+        $this->der = self::toDer($certificate);
+        $this->expires = self::parseExpiry($parsed);
+    }
+
+    /**
      * Gets the certificate expiration date.
-     *
-     * @return DateTimeImmutable The date when the certificate expires
-     *
-     * @throws OpenSSLException If certificate expiration date can’t be retrieved
      */
     public function expires(): DateTimeImmutable
     {
-        return $this->x509->getExpires();
+        return $this->expires;
     }
 
     /**
      * Gets the certificate fingerprints.
      *
-     * Returns an array of fingerprint objects containing the certificate's SHA-256 digest.
-     * This is used for DTLS fingerprint verification during the WebRTC handshake.
+     * Returns the SHA-256 digest of the DER encoded certificate, formatted as the colon separated
+     * uppercase hex string used by SDP.
      *
      * @return array<RTCDtlsFingerprint> Array of fingerprint objects
-     *
-     * @throws OpenSSLException If fingerprint calculation fails
      */
     public function getFingerprints(): array
     {
-        return [new RTCDtlsFingerprint('sha-256', $this->x509->getDigits("sha256"))];
+        return [new RTCDtlsFingerprint('sha-256', self::fingerprint($this->der))];
     }
 
     /**
-     * Generates a new certificate and private key pair.
+     * Format the SHA-256 fingerprint of a DER encoded certificate the way SDP expects it.
+     */
+    public static function fingerprint(string $der): string
+    {
+        return strtoupper(implode(':', str_split(hash('sha256', $der), 2)));
+    }
+
+    /**
+     * Generates a new EC secp256r1 key pair and a matching self-signed certificate.
      *
-     * Creates:
-     * - A new EC private key using secp256r1 curve
-     * - A corresponding X.509 certificate with default subject information
-     *
-     * @return void
-     *
-     * @throws OpenSSLException|DateInvalidOperationException If generation fails
+     * @throws RTCCertificateException If generation fails.
      */
     private function generate(): void
     {
-        $this->privateKey = $this->generatePrivateKey();
-        $this->certificate = $this->createCertificate();
+        try {
+            $key = EC::createKey('secp256r1');
+            \assert($key instanceof PrivateKey);
+            $this->privateKey = $key;
+
+            $dn = [
+                'C' => self::COUNTRY,
+                'ST' => self::STATE,
+                'L' => self::CITY,
+                'O' => self::ORGANIZATION,
+                'CN' => self::ORGANIZATION_WEBSITE,
+            ];
+
+            $subject = new X509;
+            $subject->setPublicKey($key->getPublicKey());
+            $subject->setDN($dn);
+
+            $issuer = new X509;
+            $issuer->setPrivateKey($key);
+            $issuer->setDN($dn);
+
+            $authority = new X509;
+            // The validity starts in the past to tolerate clock skew between the two peers.
+            $authority->setStartDate('-1 day');
+            $authority->setEndDate(self::VALIDITY);
+            $authority->setSerialNumber((string) random_int(1, PHP_INT_MAX), 10);
+
+            $signed = $authority->sign($issuer, $subject);
+            if ($signed === false) {
+                throw new RTCCertificateException('Could not sign the generated certificate!');
+            }
+            $this->certificate = $authority->saveX509($signed);
+            $this->der = self::toDer($this->certificate);
+            $this->expires = self::parseExpiry($signed);
+        } catch (RTCCertificateException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            throw new RTCCertificateException('Could not generate a certificate: '.$e->getMessage(), 0, $e);
+        }
     }
 
     /**
-     * Generates a new EC private key using secp256r1 curve.
-     *
-     * @return PrivateKeyInterface The generated private key
-     *
-     * @throws OpenSSLException If key generation fails
+     * Strip the PEM armour of a certificate, yielding its DER encoding.
      */
-    private function generatePrivateKey(): PrivateKeyInterface
+    private static function toDer(string $pem): string
     {
-        $ecKey = new EC(ECCurveName::secp256r1);
-        $ecKey->generate();
-
-        return $ecKey;
+        $body = preg_replace('#-----(BEGIN|END) CERTIFICATE-----|\s#', '', $pem);
+        $der = base64_decode((string) $body, true);
+        if ($der === false) {
+            throw new RTCCertificateException('The certificate is not valid PEM!');
+        }
+        return $der;
     }
 
     /**
-     * Creates a new X.509 certificate.
-     *
-     * The certificate will:
-     * - Used the generated private key
-     * - Be valid from 1 day ago to 30 days in the future
-     * - Contain default subject information (organization, location, etc.)
-     *
-     * @return X509 The created certificate
-     *
-     * @throws OpenSSLException If certificate creation fails
-     * @throws DateInvalidOperationException If date operations fail
+     * Read the notAfter date out of a parsed certificate.
      */
-    private function createCertificate(): X509
+    private static function parseExpiry(array $certificate): DateTimeImmutable
     {
-        $x509 = new X509();
-
-        $x509->setSerialNumberDefualt();
-
-        $now = new DateTimeImmutable();
-        $x509->setDateNotBefore($now->sub(new DateInterval('P1D'))); // The certificate validity started from a day ago.
-        $x509->setDateNotAfter($now->add(new DateInterval('P30D'))); // The certificate is valid until 30 days from now.
-
-        $x509->setPublicKey($this->privateKey);
-
-        $x509->setSubjectName();
-
-        $x509->addEntry("C", self::COUNTRY);
-        $x509->addEntry("ST", self::STATE);
-        $x509->addEntry("L", self::CITY);
-        $x509->addEntry("O", self::ORGANIZATION);
-        $x509->addEntry("CN", self::ORGANIZATION_WEBSITE);
-
-        $x509->setIssuerName();
-
-        $x509->sign($this->privateKey);
-
-        $this->x509 = $x509;
-
-        return $x509;
+        $validity = $certificate['tbsCertificate']['validity']['notAfter'] ?? [];
+        $date = $validity['utcTime'] ?? $validity['generalTime'] ?? null;
+        try {
+            return $date !== null ? new DateTimeImmutable($date) : new DateTimeImmutable(self::VALIDITY);
+        } catch (Throwable) {
+            return new DateTimeImmutable(self::VALIDITY);
+        }
     }
 
     /**
-     * Gets the certificate.
-     *
-     * @return X509|string The certificate as X509 object or file path string
+     * Gets the certificate, in PEM form.
      */
-    public function getCertificate(): X509|string
+    public function getCertificate(): string
     {
         return $this->certificate;
     }
 
     /**
-     * Gets the private key.
-     *
-     * @return PrivateKeyInterface|string The private key as object or file path string
+     * Gets the DER encoding of the certificate, as sent in the DTLS Certificate message.
      */
-    public function getPrivateKey(): PrivateKeyInterface|string
+    public function getDer(): string
+    {
+        return $this->der;
+    }
+
+    /**
+     * Gets the private key.
+     */
+    public function getPrivateKey(): PrivateKey
     {
         return $this->privateKey;
     }
