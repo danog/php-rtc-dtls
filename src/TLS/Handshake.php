@@ -141,7 +141,7 @@ class Handshake
      */
     private function periodicCheckHandshakeStatus(): void
     {
-        $this->periodicCheck = $this->loop->addPeriodicTimer(0, function (): void {
+        $this->periodicCheck = $this->loop->addPeriodicTimer(0.005, function (): void {
             try {
                 $this->ssl->doHandshake();
                 $this->cleanUp();
