@@ -153,7 +153,9 @@ class Handshake
             } catch (Throwable $e) {
                 $this->deferred->reject(new HandshakeException("Handshake Failed", $e->getCode(), $e));
             }
-            if (!$this->timer && $timeout = $this->ssl->dtlsV1GetTimeout()) {
+            // A deadline that has already elapsed is reported as 0.0, which a truthiness test
+            // would discard and leave the flight unarmed.
+            if ($this->timer === null && ($timeout = $this->ssl->dtlsV1GetTimeout()) !== null) {
                 $this->handleDTLSTimeout($timeout);
             }
         });
@@ -187,6 +189,11 @@ class Handshake
     private function handleDTLSTimeout(float $timeout): void
     {
         $this->timer = $this->loop->addTimer($timeout, function () {
+            // A one-shot timer does not clear its own handle. Leaving it set made the guard in
+            // periodicCheckHandshakeStatus() refuse to arm any further timer, so exactly one
+            // flight was ever retransmitted and a second lost datagram stalled the handshake
+            // for good.
+            $this->timer = null;
             $this->ssl->dtlsV1HandleTimeout();
             $this->sendBIOData();
         });
