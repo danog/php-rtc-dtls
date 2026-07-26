@@ -3,6 +3,7 @@
 namespace Tests\Webrtc\DTLS;
 
 use DateTimeImmutable;
+use DateTimeZone;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Webrtc\DTLS\RTCCertificate;
@@ -35,7 +36,7 @@ class RTCCertificateTest extends TestCase
         $expires = $certificate->expires();
         $this->assertInstanceOf(DateTimeImmutable::class, $expires);
         $this->assertEquals(
-            DateTimeImmutable::createFromFormat('Y-m-d H:i:s.u', '2026-03-14 00:31:17.000000'),
+            new DateTimeImmutable('2046-07-21 13:03:38', new DateTimeZone('UTC')),
             $expires
         );
 
@@ -43,7 +44,7 @@ class RTCCertificateTest extends TestCase
         $this->assertCount(1, $fingerprints);
         $this->assertEquals('sha-256', $fingerprints[0]->algorithm);
         $this->assertEquals(
-            '80:D6:8B:31:64:AA:3C:A8:39:17:C0:DC:B2:D9:2D:31:32:10:24:F5:E1:8E:DF:39:20:F8:9D:75:D1:57:C1:9E',
+            '9E:B2:6E:15:58:C3:68:C6:A1:CE:FA:D1:BA:EC:C6:0C:EE:C6:19:EC:D2:EF:D7:03:11:A1:1F:B5:3D:9E:64:6B',
             $fingerprints[0]->value
         );
     }
