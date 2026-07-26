@@ -56,10 +56,10 @@ use Webrtc\Stats\enum\TLSState;
 class TLS
 {
     /** @var int Default buffer size for BIO operations */
-    private const int BUFFER_SIZE = 1500;
+    private const BUFFER_SIZE = 1500;
 
     /** @var array Supported cipher suites for the TLS connection */
-    private const array SUPPORTED_CIPHER_SUITES = [
+    private const SUPPORTED_CIPHER_SUITES = [
         // AES-128-GCM-SHA256
         "ECDHE-ECDSA-AES128-GCM-SHA256",
         "ECDHE-RSA-AES128-GCM-SHA256",

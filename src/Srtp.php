@@ -35,7 +35,7 @@ class Srtp
      * The Size of the replay protection window for SRTP packets
      * Helps prevent replay attacks by tracking previously received packets
      */
-    private const int WINDOW_SIZE = 1024;
+    private const WINDOW_SIZE = 1024;
 
     /**
      * Predefined set of supported SRTP cryptographic profiles
@@ -46,7 +46,7 @@ class Srtp
      * - keyLength: Length of the encryption key in bytes
      * - saltLent: Length of the salt value in bytes
      */
-    public const array DEFAULT_PROFILES = [
+    public const DEFAULT_PROFILES = [
         [
             "srtpProfile" => SrtpProfile::AEAD_AES_256_GCM,
             "sslProfile" => "SRTP_AEAD_AES_256_GCM",

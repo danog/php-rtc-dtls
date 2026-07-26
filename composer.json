@@ -23,7 +23,7 @@
         }
     ],
     "require": {
-        "php": "^8.4",
+        "php": "^8.2",
         "quasarstream/exception": "^1.0",
         "quasarstream/ice": "^1.0",
         "quasarstream/rtp": "^1.0",
@@ -32,7 +32,9 @@
         "quasarstream/sdp": "^1.0",
         "quasarstream/ssl": "^1.0",
         "quasarstream/srtp": "^1.0",
-        "evenement/evenement": "^3.0"
+        "evenement/evenement": "^3.0",
+        "symfony/polyfill-php84": "^1.32",
+        "phpseclib/phpseclib": "^3.0"
     },
     "require-dev": {
         "phpunit/php-code-coverage": "11.0.x-dev",

@@ -38,22 +38,22 @@ use Throwable;
 class RTCCertificate
 {
     /** @var string Default country for a certificate subject */
-    private const string COUNTRY = "US";
+    private const COUNTRY = "US";
 
     /** @var string Default state for a certificate subject */
-    private const string STATE = "Virginia";
+    private const STATE = "Virginia";
 
     /** @var string Default city for a certificate subject */
-    private const string CITY = "Reston";
+    private const CITY = "Reston";
 
     /** @var string Default organization for a certificate subject */
-    private const string ORGANIZATION = "PHP WebRTC";
+    private const ORGANIZATION = "PHP WebRTC";
 
     /** @var string Default common name for a certificate subject */
-    private const string ORGANIZATION_WEBSITE = "webrtc.php";
+    private const ORGANIZATION_WEBSITE = "webrtc.php";
 
     /** How long the generated certificate stays valid. */
-    private const string VALIDITY = '+30 days';
+    private const VALIDITY = '+30 days';
 
     private PrivateKey $privateKey;
 
