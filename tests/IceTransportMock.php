@@ -3,7 +3,6 @@
 namespace Tests\Webrtc\DTLS;
 
 use Evenement\EventEmitter;
-use React\Promise\PromiseInterface;
 use Webrtc\ICE\Enum\IceRole;
 use Webrtc\ICE\RTCIceCandidate;
 use Webrtc\ICE\RTCIceConnectionInterface;
@@ -52,7 +51,7 @@ class IceTransportMock extends EventEmitter implements RTCIceTransportInterface
         // TODO: Implement getIceConnection() method.
     }
 
-    public function start(RTCIceParameters $remoteIceParameters): PromiseInterface
+    public function start(RTCIceParameters $remoteIceParameters): void
     {
         // TODO: Implement start() method.
     }
