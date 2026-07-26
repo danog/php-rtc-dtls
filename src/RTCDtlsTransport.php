@@ -507,6 +507,12 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
             $this->stop();
             return;
         } catch (TLSException|OpenSSLException) {
+            // Carrying no application data does not mean the engine produced nothing: a peer
+            // that never saw our final flight retransmits its own, and the answer to that is
+            // queued right here. Returning without flushing left it sitting in the buffer,
+            // so the peer retransmitted until it gave up and the handshake never finished.
+            $this->sendBioData();
+
             return;
         }
         $this->sendBioData();

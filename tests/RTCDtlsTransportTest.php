@@ -288,12 +288,14 @@ class RTCDtlsTransportTest extends TestCase
 
     public function testLossyChannel()
     {
-        // Recovering from a lost flight works about half the time: the handshake stalls instead
-        // of completing, and because connect() waits without a bound the test hangs rather than
-        // fails, taking the whole suite with it. Three causes have been fixed so far — the
-        // retransmission timer never re-armed after firing once, a completed peer never answered
-        // a retransmitted flight, and retransmissions replayed their record sequence numbers so
-        // the peer discarded them as duplicates — but something still stalls the exchange.
+        // Recovery now works about four times in five, up from under half. What remains is a
+        // hard stall rather than slowness: a stuck run is still stuck after 90 seconds, while
+        // a good one finishes inside a second. Four causes are fixed so far — the retransmission
+        // timer never re-armed after firing once, a completed peer never answered a retransmitted
+        // flight, retransmissions replayed their record sequence numbers so the peer discarded
+        // them, and the answer to a retransmitted flight was queued but never flushed. The
+        // likeliest remaining one is a peer that has sent its final flight but not completed
+        // failing to re-send it when the previous flight arrives again.
         // Enable with PHP_RTC_LOSSY=1 when working on it.
         if (getenv('PHP_RTC_LOSSY') !== '1') {
             self::markTestSkipped('DTLS loss recovery is still unreliable; set PHP_RTC_LOSSY=1 to run.');
