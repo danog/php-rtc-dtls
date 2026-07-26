@@ -18,6 +18,8 @@ use Webrtc\RTPParameter\RTCRtpReceiveParameters;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
 use Webrtc\SSL\Exception\OpenSSLException;
 use Webrtc\Stats\enum\TLSState;
+use Amp\CancelledException;
+use Amp\TimeoutCancellation;
 use function Amp\async;
 
 #[UsesClass(RTCCertificate::class)]
@@ -27,7 +29,10 @@ use function Amp\async;
 #[CoversClass(RTCDtlsTransport::class)]
 class RTCDtlsTransportTest extends TestCase
 {
-    private int $lossProbability = 0;
+    /** How long a handshake may take before the test gives up on it. */
+    private const HANDSHAKE_TIMEOUT = 30;
+
+    private ?DropList $drops = null;
     private bool $disconnect = false;
 
     public function testData()
@@ -286,24 +291,34 @@ class RTCDtlsTransportTest extends TestCase
         $client->stop();
     }
 
-    public function testLossyChannel()
+    /**
+     * A lost flight has to be recovered by retransmission.
+     *
+     * The positions are fixed rather than random so that a failure is reproducible: a drop
+     * rate makes the outcome differ run to run, which turns a regression into something that
+     * looks like flakiness.
+     */
+    public function testRecoversFromALostFlight(): void
     {
-        // Recovery improved markedly but is still unreliable, and run-to-run variance at this
-        // loss rate is wide enough that comparing candidate fixes over twenty runs is not
-        // conclusive. What remains is a
-        // hard stall rather than slowness: a stuck run is still stuck after 90 seconds, while
-        // a good one finishes inside a second. Four causes are fixed so far — the retransmission
-        // timer never re-armed after firing once, a completed peer never answered a retransmitted
-        // flight, retransmissions replayed their record sequence numbers so the peer discarded
-        // them, and the answer to a retransmitted flight was queued but never flushed. The
-        // likeliest remaining one is a peer that has sent its final flight but not completed
-        // failing to re-send it when the previous flight arrives again.
-        // Enable with PHP_RTC_LOSSY=1 when working on it.
-        if (getenv('PHP_RTC_LOSSY') !== '1') {
-            self::markTestSkipped('DTLS loss recovery is still unreliable; set PHP_RTC_LOSSY=1 to run.');
-        }
+        $this->drops = new DropList([1]);
+        [$server, $client] = $this->createDtlsTransport();
 
-        $this->lossProbability = 10;
+        $this->connect($server, $client);
+
+        $this->assertEquals(TLSState::CONNECTED, $server->getState());
+        $this->assertEquals(TLSState::CONNECTED, $client->getState());
+
+        $server->stop();
+        $client->stop();
+    }
+
+    /**
+     * Three consecutive losses take two doublings of the retransmission timer to get past,
+     * so this also pins down that the backoff keeps running rather than giving up.
+     */
+    public function testRecoversFromSeveralLostFlights(): void
+    {
+        $this->drops = new DropList([1, 2, 3]);
         [$server, $client] = $this->createDtlsTransport();
 
         $this->connect($server, $client);
@@ -349,15 +364,15 @@ class RTCDtlsTransportTest extends TestCase
 
     private function connectPairs(IceTransportMock $client, IceTransportMock $server): void
     {
-        $probability = new Probability($this->lossProbability);
+        $drops = $this->drops ?? new DropList();
 
-        $server->on('send', function ($data) use ($client, $probability) {
-            if (!$probability->probabilityHappen() && !$this->disconnect) {
+        $server->on('send', function ($data) use ($client, $drops) {
+            if (!$drops->shouldDrop() && !$this->disconnect) {
                 $client->emit("data", [$data]);
             }
         });
-        $client->on('send', function ($data) use ($server, $probability) {
-            if (!$probability->probabilityHappen() && !$this->disconnect) {
+        $client->on('send', function ($data) use ($server, $drops) {
+            if (!$drops->shouldDrop() && !$this->disconnect) {
                 $server->emit("data", [$data]);
             }
         });
@@ -365,13 +380,20 @@ class RTCDtlsTransportTest extends TestCase
 
     private function connect(RTCDtlsTransport $server, RTCDtlsTransport $client)
     {
-        // Both ends must be handshaking at once, so each start() runs in its own fiber.
+        // Both ends must be handshaking at once, so each start() runs in its own fiber. The
+        // wait is bounded: a handshake that never converges should fail the test rather than
+        // hang it, which would take the rest of the suite down with it.
         $futures = [
             async(fn() => $server->start($client->getPeerCertificates())),
             async(fn() => $client->start($server->getPeerCertificates())),
         ];
-        foreach ($futures as $future) {
-            $future->await();
+
+        try {
+            foreach ($futures as $future) {
+                $future->await(new TimeoutCancellation(self::HANDSHAKE_TIMEOUT));
+            }
+        } catch (CancelledException) {
+            self::fail(sprintf('The handshake did not complete within %s seconds.', self::HANDSHAKE_TIMEOUT));
         }
     }
 
