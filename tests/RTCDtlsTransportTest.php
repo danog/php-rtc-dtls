@@ -288,7 +288,9 @@ class RTCDtlsTransportTest extends TestCase
 
     public function testLossyChannel()
     {
-        // Recovery now works about four times in five, up from under half. What remains is a
+        // Recovery improved markedly but is still unreliable, and run-to-run variance at this
+        // loss rate is wide enough that comparing candidate fixes over twenty runs is not
+        // conclusive. What remains is a
         // hard stall rather than slowness: a stuck run is still stuck after 90 seconds, while
         // a good one finishes inside a second. Four causes are fixed so far — the retransmission
         // timer never re-armed after firing once, a completed peer never answered a retransmitted
