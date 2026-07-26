@@ -12,7 +12,6 @@
 namespace Webrtc\DTLS\TLS;
 
 use Psr\Log\LoggerInterface;
-use React\Promise\PromiseInterface;
 use Webrtc\DTLS\Enum\SSLHandshakeState;
 use Webrtc\DTLS\Exception\TLSException;
 use Webrtc\DTLS\RTCCertificate;
@@ -113,12 +112,12 @@ class TLS
      *
      * @param RTCIceTransportInterface $transport The ICE transport to use for communication
      * @param SSLHandshakeState $state Whether to initiate as client or server
-     * @return PromiseInterface A promise that resolves when the handshake completes
+     * @return void Returns once the handshake has completed.
      */
-    public function startHandshaking(RTCIceTransportInterface $transport, SSLHandshakeState $state): PromiseInterface
+    public function startHandshaking(RTCIceTransportInterface $transport, SSLHandshakeState $state): void
     {
         $handshake = new Handshake($this, $transport, $state);
-        return $handshake->do();
+        $handshake->do();
     }
 
     /**

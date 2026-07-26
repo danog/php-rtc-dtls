@@ -18,9 +18,7 @@ use Webrtc\RTPParameter\RTCRtpReceiveParameters;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
 use Webrtc\SSL\Exception\OpenSSLException;
 use Webrtc\Stats\enum\TLSState;
-use function React\Async\async;
-use function React\Async\await;
-use function React\Async\parallel;
+use function Amp\async;
 
 #[UsesClass(RTCCertificate::class)]
 #[UsesClass(Srtp::class)]
@@ -220,14 +218,14 @@ class RTCDtlsTransportTest extends TestCase
 
         $wrongFingerprint = [new RTCDtlsFingerprint("wrong fingerprint", 'sha-256')];
 
-        await(
-            parallel(
-                [
-                    fn() => async(fn() => $server->start($wrongFingerprint))(),
-                    fn() => async(fn() => $client->start($server->getPeerCertificates()))()
-                ]
-            )
-        );
+        // Both ends must be handshaking at once, so each start() runs in its own fiber.
+        $futures = [
+            async(fn() => $server->start($wrongFingerprint)),
+            async(fn() => $client->start($server->getPeerCertificates())),
+        ];
+        foreach ($futures as $future) {
+            $future->await();
+        }
 
         $this->assertEquals(TLSState::FAILED, $server->getState());
         $this->assertEquals(TLSState::CONNECTED, $client->getState());
@@ -363,14 +361,14 @@ class RTCDtlsTransportTest extends TestCase
 
     private function connect(RTCDtlsTransport $server, RTCDtlsTransport $client)
     {
-        await(
-            parallel(
-                [
-                    fn() => async(fn() => $server->start($client->getPeerCertificates()))(),
-                    fn() => async(fn() => $client->start($server->getPeerCertificates()))()
-                ]
-            )
-        );
+        // Both ends must be handshaking at once, so each start() runs in its own fiber.
+        $futures = [
+            async(fn() => $server->start($client->getPeerCertificates())),
+            async(fn() => $client->start($server->getPeerCertificates())),
+        ];
+        foreach ($futures as $future) {
+            $future->await();
+        }
     }
 
     private function getRtpReceiverParameters(int $ssrc): RTCRtpReceiveParameters

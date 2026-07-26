@@ -12,11 +12,8 @@
 namespace Webrtc\DTLS\TLS;
 
 use Exception;
-use React\EventLoop\Loop;
-use React\EventLoop\LoopInterface;
-use React\EventLoop\TimerInterface;
-use React\Promise\Deferred;
-use React\Promise\PromiseInterface;
+use Amp\DeferredFuture;
+use Revolt\EventLoop;
 use Throwable;
 use Webrtc\DTLS\Enum\SSLHandshakeState;
 use Webrtc\DTLS\Exception\HandshakeException;
@@ -42,11 +39,8 @@ class Handshake
 {
     use EventForwarder;
 
-    /** @var Deferred The deferred promise for handshake completion */
-    private Deferred $deferred;
-
-    /** @var LoopInterface The event loop instance */
-    private LoopInterface $loop;
+    /** @var DeferredFuture Settled when the handshake finishes or fails */
+    private DeferredFuture $deferred;
 
     /** @var SSLInterface The SSL context for the handshake */
     private SSLInterface $ssl;
@@ -57,11 +51,11 @@ class Handshake
     /** @var BIOInterface The BIO buffer for SSL operations */
     private BIOInterface $bio;
 
-    /** @var TimerInterface|null Periodic timer for checking handshake status */
-    private ?TimerInterface $periodicCheck;
+    /** @var string|null Handle of the periodic handshake status timer */
+    private ?string $periodicCheck;
 
-    /** @var TimerInterface|null Timer for handling DTLS timeout */
-    private ?TimerInterface $timer = null;
+    /** @var string|null Handle of the retransmission timer */
+    private ?string $timer = null;
 
     /** @var array Listeners for transport events */
     private array $listeners;
@@ -77,9 +71,8 @@ class Handshake
      */
     public function __construct(private readonly TLS $tls, RTCIceTransportInterface $transport, private readonly SSLHandshakeState $state)
     {
-        $this->deferred = new Deferred();
+        $this->deferred = new DeferredFuture();
         $this->transport = $transport;
-        $this->loop = Loop::get();
         $this->ssl = $tls->getSsl();
         $this->bio = $tls->getBio();
         $this->setSSLHandshakeState();
@@ -98,7 +91,7 @@ class Handshake
     private function receive(string $bytes): void
     {
         if ($this->timer) {
-            $this->loop->cancelTimer($this->timer);
+            EventLoop::cancel($this->timer);
             $this->timer = null;
         }
 
@@ -108,15 +101,15 @@ class Handshake
     /**
      * Initiates the handshake process.
      *
-     * Starts the handshake process and returns a promise that will be resolved when the handshake
-     * completes successfully or rejected if it fails.
+     * Blocks until the handshake completes, or throws if it fails.
      *
-     * @return PromiseInterface A promise representing the handshake completion
+     * @return void
+     * @throws HandshakeException If the handshake could not be completed.
      */
-    public function do(): PromiseInterface
+    public function do(): void
     {
         $this->periodicCheckHandshakeStatus();
-        return $this->deferred->promise();
+        $this->deferred->getFuture()->await();
     }
 
     /**
@@ -141,17 +134,17 @@ class Handshake
      */
     private function periodicCheckHandshakeStatus(): void
     {
-        $this->periodicCheck = $this->loop->addPeriodicTimer(0.005, function (): void {
+        $this->periodicCheck = EventLoop::repeat(0.005, function (): void {
             try {
                 $this->ssl->doHandshake();
                 $this->cleanUp();
-                $this->deferred->resolve(true);
+                $this->deferred->complete(true);
             } catch (WantReadException) {
                 $this->sendBIOData();
             } catch (WantWriteException) {
                 // Handshake needs more writing, handled by async loop
             } catch (Throwable $e) {
-                $this->deferred->reject(new HandshakeException("Handshake Failed", $e->getCode(), $e));
+                $this->deferred->error(new HandshakeException("Handshake Failed", $e->getCode(), $e));
             }
             // A deadline that has already elapsed is reported as 0.0, which a truthiness test
             // would discard and leave the flight unarmed.
@@ -188,7 +181,7 @@ class Handshake
      */
     private function handleDTLSTimeout(float $timeout): void
     {
-        $this->timer = $this->loop->addTimer($timeout, function () {
+        $this->timer = EventLoop::delay($timeout, function () {
             // A one-shot timer does not clear its own handle. Leaving it set made the guard in
             // periodicCheckHandshakeStatus() refuse to arm any further timer, so exactly one
             // flight was ever retransmitted and a second lost datagram stalled the handshake
@@ -211,9 +204,9 @@ class Handshake
         $this->tls->setState(TLSState::CONNECTED);
         $this->sendBIODataUntilEnd();
 
-        $this->loop->cancelTimer($this->periodicCheck);
+        EventLoop::cancel($this->periodicCheck);
         if ($this->timer) {
-            $this->loop->cancelTimer($this->timer);
+            EventLoop::cancel($this->timer);
         }
     }
 

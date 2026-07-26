@@ -13,7 +13,6 @@ namespace Webrtc\DTLS;
 
 use Evenement\EventEmitter;
 use Psr\Log\LoggerInterface;
-use React\Promise\PromiseInterface;
 use Throwable;
 use Webrtc\DataChannel\RTCSctpTransportInterface;
 use Webrtc\DTLS\Enum\SSLHandshakeState;
@@ -55,8 +54,6 @@ use Webrtc\SSL\Exception\ZeroReturnException;
 use Webrtc\Stats\enum\TLSState;
 use Webrtc\Stats\RTCStatsReport;
 use Webrtc\Stats\RTCTransportStats;
-use function React\Async\async;
-use function React\Async\await;
 
 /**
  * Class RTCDtlsTransport
@@ -312,7 +309,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
 
         // Start handshaking
         try {
-            await($this->tls->startHandshaking($this->transport, $this->getHandShakeState()));
+            $this->tls->startHandshaking($this->transport, $this->getHandShakeState());
         } catch (Throwable $e) {
             $this->setFailedState("DTLS: " . $e->getMessage());
             return;
@@ -343,22 +340,20 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
     /**
      * Stops the DTLS transport and cleans up resources.
      *
-     * @return PromiseInterface A promise that resolves when shutdown is complete
+     * @return void Returns once shutdown is complete.
      */
-    public function stop(): PromiseInterface
+    public function stop(): void
     {
-        return async(function () {
-            if (in_array($this->state, [TLSState::CONNECTING, TLSState::CONNECTED])) {
-                try {
-                    $this->tls->shutdown(); // Attempt to shut down, regardless of success or failure.
-                    $this->sendBioData();
-                } catch (\Throwable) {
-                    // TODO: it should try 3 times before giving up
-                }
-                $this->setState(TLSState::CLOSED);
-                $this->logger?->debug("DTLS: DTLS shutdown process has been successfully completed. All secure connections have been terminated.");
+        if (in_array($this->state, [TLSState::CONNECTING, TLSState::CONNECTED])) {
+            try {
+                $this->tls->shutdown(); // Attempt to shut down, regardless of success or failure.
+                $this->sendBioData();
+            } catch (\Throwable) {
+                // TODO: it should try 3 times before giving up
             }
-        })();
+            $this->setState(TLSState::CLOSED);
+            $this->logger?->debug("DTLS: DTLS shutdown process has been successfully completed. All secure connections have been terminated.");
+        }
     }
 
     /**
