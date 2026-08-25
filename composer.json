@@ -1,7 +1,7 @@
 {
     "name": "danog/php-rtc-dtls",
     "type": "library",
-    "description": "A PHP implementation of Datagram Transport Layer Security (DTLS), designed for secure communication over UDP, especially in real-time communication protocols such as WebRTC and SRTP. Fork with FFI made optional and a pure-PHP DTLS/SRTP stack, maintained for MadelineProto.",
+    "description": "Pure-PHP DTLS 1.2 for WebRTC, powered by phpseclib and Amp v3. MadelineProto fork with reliable handshake retransmission for the modular danog/php-rtc stack.",
     "keywords": [
         "rtp",
         "dtls"
