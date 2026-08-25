@@ -30,7 +30,7 @@ All internal Composer dependencies use their `danog/php-rtc-*` package names dir
 
 This package is part of the PHP WebRTC library. For complete documentation, examples, and API reference, visit:
 
-[PHP WebRTC Documentation](https://www.quasarstream.com/php-webrtc)
+[PHP WebRTC Documentation](https://github.com/danog/php-rtc-dtls)
 
 ## Credits
 

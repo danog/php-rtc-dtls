@@ -17,7 +17,7 @@ A PHP implementation of [Datagram Transport Layer Security (DTLS)](https://datat
 ## Documentation
 
 This package is a part of PHP WebRTC library. For full documentation, examples, and API reference, please visit:
-[PHP WebRTC Documentation](https://www.quasarstream.com/php-webrtc)
+[PHP WebRTC Documentation](https://github.com/danog/php-rtc-dtls)
 
 
 ## Credits
