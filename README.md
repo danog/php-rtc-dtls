@@ -9,7 +9,7 @@ A PHP implementation of [Datagram Transport Layer Security (DTLS)](https://datat
 
 This is the `danog/php-rtc-dtls` fork used by MadelineProto. It targets PHP 8.2+, runs on Amp v3 fibers, and uses the pure-PHP DTLS 1.2 engine backed by phpseclib instead of OpenSSL FFI. Its handshake driver includes timer, retransmission, and packet-loss recovery fixes validated against independent DTLS implementations.
 
-The forked stack keeps the upstream `quasarstream/*` dependency constraints for compatibility. Each `danog/php-rtc-*` package replaces its upstream counterpart, so consumers select the complete maintained stack by requiring the corresponding danog packages together.
+All internal Composer dependencies use their `danog/php-rtc-*` package names directly, so installing a component selects the maintained danog packages throughout the dependency graph.
 
 ## Features
 
