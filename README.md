@@ -24,7 +24,6 @@ All internal Composer dependencies use their `danog/php-rtc-*` package names dir
 
 - PHP ≥ 8.2
 - phpseclib 3 (installed through Composer)
-- Linux environment (Windows/macOS support planned)
 
 ## Documentation
 
