@@ -9,28 +9,28 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS\TLS;
+namespace Webrtc\DTLS\DTLS\TLS;
 
 use Psr\Log\LoggerInterface;
-use Webrtc\DTLS\Enum\SSLHandshakeState;
-use Webrtc\DTLS\Exception\TLSException;
-use Webrtc\DTLS\RTCCertificate;
-use Webrtc\DTLS\Srtp;
+use Webrtc\DTLS\DTLS\Enum\SSLHandshakeState;
+use Webrtc\DTLS\DTLS\Exception\TLSException;
+use Webrtc\DTLS\DTLS\RTCCertificate;
+use Webrtc\DTLS\DTLS\Srtp;
 use Webrtc\ICE\RTCIceTransportInterface;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
 use Webrtc\Srtp\Exception\SrtpException;
-use Webrtc\SSL\Enum\BioMethod;
-use Webrtc\SSL\Enum\ContextMethod;
-use Webrtc\SSL\Enum\Verify;
-use Webrtc\SSL\Exception\OpenSSLException;
-use Webrtc\SSL\Exception\SSLException;
-use Webrtc\SSL\Exception\SysCallException;
-use Webrtc\SSL\Exception\ZeroReturnException;
-use Webrtc\SSL\SSL\BIO;
-use Webrtc\SSL\SSL\BIOInterface;
-use Webrtc\SSL\SSL\Context;
-use Webrtc\SSL\SSL\SSL;
-use Webrtc\SSL\SSL\SSLInterface;
+use Webrtc\DTLS\Enum\BioMethod;
+use Webrtc\DTLS\Enum\ContextMethod;
+use Webrtc\DTLS\Enum\Verify;
+use Webrtc\DTLS\Exception\OpenSSLException;
+use Webrtc\DTLS\Exception\SSLException;
+use Webrtc\DTLS\Exception\SysCallException;
+use Webrtc\DTLS\Exception\ZeroReturnException;
+use Webrtc\DTLS\SSL\BIO;
+use Webrtc\DTLS\SSL\BIOInterface;
+use Webrtc\DTLS\SSL\Context;
+use Webrtc\DTLS\SSL\SSL;
+use Webrtc\DTLS\SSL\SSLInterface;
 use Webrtc\Stats\enum\TLSState;
 
 /**
@@ -47,7 +47,7 @@ use Webrtc\Stats\enum\TLSState;
  * - Managing SRTP (Secure Real-time Transport Protocol) profiles
  * - Exporting keying material for SRTP
  *
- * @package Webrtc\DTLS\TLS
+ * @package Webrtc\DTLS\DTLS\TLS
  */
 class TLS
 {

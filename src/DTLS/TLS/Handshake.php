@@ -9,19 +9,19 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS\TLS;
+namespace Webrtc\DTLS\DTLS\TLS;
 
 use Exception;
 use Amp\DeferredFuture;
 use Revolt\EventLoop;
 use Throwable;
-use Webrtc\DTLS\Enum\SSLHandshakeState;
-use Webrtc\DTLS\Exception\HandshakeException;
+use Webrtc\DTLS\DTLS\Enum\SSLHandshakeState;
+use Webrtc\DTLS\DTLS\Exception\HandshakeException;
 use Webrtc\ICE\RTCIceTransportInterface;
 use Webrtc\Mixin\EventForwarder;
-use Webrtc\SSL\Exception\OpenSSLException;
-use Webrtc\SSL\SSL\BIOInterface;
-use Webrtc\SSL\SSL\SSLInterface;
+use Webrtc\DTLS\Exception\OpenSSLException;
+use Webrtc\DTLS\SSL\BIOInterface;
+use Webrtc\DTLS\SSL\SSLInterface;
 use Webrtc\Stats\enum\TLSState;
 
 /**
@@ -31,7 +31,7 @@ use Webrtc\Stats\enum\TLSState;
  * This class handles both client and server-side handshake operations, managing timeouts, BIO buffer operations,
  * and state transitions during the TLS handshake process.
  *
- * @package Webrtc\DTLS\TLS
+ * @package Webrtc\DTLS\DTLS\TLS
  */
 class Handshake
 {

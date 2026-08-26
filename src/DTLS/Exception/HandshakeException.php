@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS\Exception;
+namespace Webrtc\DTLS\DTLS\Exception;
 
 class HandshakeException extends \Exception implements DTLSExceptionInterface
 {

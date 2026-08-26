@@ -11,9 +11,7 @@
 
 namespace Webrtc\DTLS\Exception;
 
-use Webrtc\Exception\WebrtcExceptionInterface;
-
-interface DTLSExceptionInterface extends WebrtcExceptionInterface
+class SSLException extends OpenSSLException
 {
 
 }

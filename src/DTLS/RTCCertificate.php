@@ -9,9 +9,9 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS;
+namespace Webrtc\DTLS\DTLS;
 
-use Webrtc\DTLS\Exception\RTCCertificateException;
+use Webrtc\DTLS\DTLS\Exception\RTCCertificateException;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
 use DateTimeImmutable;
 use phpseclib3\Crypt\EC;
@@ -33,7 +33,7 @@ use Throwable;
  * - Generated automatically with an EC secp256r1 private key (default behavior)
  * - Loaded from existing certificate and private key files
  *
- * @package Webrtc\DTLS
+ * @package Webrtc\DTLS\DTLS
  */
 class RTCCertificate
 {

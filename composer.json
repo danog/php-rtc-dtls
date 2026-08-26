@@ -1,10 +1,16 @@
 {
     "name": "danog/php-rtc-dtls",
     "type": "library",
-    "description": "Pure-PHP DTLS 1.2 for WebRTC, powered by phpseclib and Amp v3. MadelineProto fork with reliable handshake retransmission for the modular danog/php-rtc stack.",
+    "description": "Pure-PHP DTLS 1.2 for WebRTC, powered by phpseclib and Amp v3.",
     "keywords": [
         "rtp",
-        "dtls"
+        "dtls",
+        "ssl",
+        "crypto",
+        "openssl",
+        "x509",
+        "certificate",
+        "privatekey"
     ],
     "homepage": "https://github.com/danog/php-rtc-dtls",
     "license": "BSD-3-Clause",
@@ -34,7 +40,7 @@
         "danog/php-rtc-sctp": "^1.0",
         "danog/php-rtc-stats": "^1.0",
         "danog/php-rtc-sdp": "^1.0",
-        "danog/php-rtc-ssl": "^1.0",
+        "danog/php-rtc-mixin": "^1.0",
         "danog/php-rtc-srtp": "^1.0",
         "evenement/evenement": "^3.0",
         "symfony/polyfill-php84": "^1.32",

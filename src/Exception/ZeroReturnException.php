@@ -11,7 +11,7 @@
 
 namespace Webrtc\DTLS\Exception;
 
-class TLSException extends \Exception implements DTLSExceptionInterface
+class ZeroReturnException extends OpenSSLException
 {
 
 }

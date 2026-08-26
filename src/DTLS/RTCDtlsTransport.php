@@ -9,16 +9,16 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS;
+namespace Webrtc\DTLS\DTLS;
 
 use Evenement\EventEmitter;
 use Psr\Log\LoggerInterface;
 use Throwable;
 use Webrtc\DataChannel\RTCSctpTransportInterface;
-use Webrtc\DTLS\Enum\SSLHandshakeState;
-use Webrtc\DTLS\Exception\DTLSException;
-use Webrtc\DTLS\Exception\TLSException;
-use Webrtc\DTLS\TLS\TLS;
+use Webrtc\DTLS\DTLS\Enum\SSLHandshakeState;
+use Webrtc\DTLS\DTLS\Exception\DTLSException;
+use Webrtc\DTLS\DTLS\Exception\TLSException;
+use Webrtc\DTLS\DTLS\TLS\TLS;
 use Webrtc\ICE\Enum\IceRole;
 use Webrtc\ICE\RTCIceTransportInterface;
 use Webrtc\Mixin\EventForwarder;
@@ -44,10 +44,10 @@ use Webrtc\Srtp\Exception\SrtpException;
 use Webrtc\Srtp\Exception\SrtpExceptionInterface;
 use Webrtc\Srtp\Exception\SrtpValidateException;
 use Webrtc\Srtp\Session;
-use Webrtc\SSL\Exception\OpenSSLException;
-use Webrtc\SSL\Exception\SSLException;
-use Webrtc\SSL\Exception\SysCallException;
-use Webrtc\SSL\Exception\ZeroReturnException;
+use Webrtc\DTLS\Exception\OpenSSLException;
+use Webrtc\DTLS\Exception\SSLException;
+use Webrtc\DTLS\Exception\SysCallException;
+use Webrtc\DTLS\Exception\ZeroReturnException;
 use Webrtc\Stats\enum\TLSState;
 use Webrtc\Stats\RTCStatsReport;
 use Webrtc\Stats\RTCTransportStats;
@@ -66,7 +66,7 @@ use Webrtc\Stats\RTCTransportStats;
  * - Handling SCTP data channel traffic
  * - Providing transport statistics
  *
- * @package Webrtc\DTLS
+ * @package Webrtc\DTLS\DTLS
  */
 class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface
 {

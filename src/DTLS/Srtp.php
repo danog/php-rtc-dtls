@@ -9,9 +9,9 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS;
+namespace Webrtc\DTLS\DTLS;
 
-use Webrtc\DTLS\Exception\DTLSException;
+use Webrtc\DTLS\DTLS\Exception\DTLSException;
 use Webrtc\Srtp\Enum\SrtpProfile;
 use Webrtc\Srtp\Enum\SsrcType;
 use Webrtc\Srtp\Exception\SrtpException;

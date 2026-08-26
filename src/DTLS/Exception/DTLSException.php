@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS\Exception;
+namespace Webrtc\DTLS\DTLS\Exception;
 
 class DTLSException extends \Exception implements DTLSExceptionInterface
 {

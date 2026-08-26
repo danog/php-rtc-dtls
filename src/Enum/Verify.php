@@ -9,9 +9,13 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS\Exception;
+namespace Webrtc\DTLS\Enum;
 
-class RTCCertificateException extends \Exception implements DTLSExceptionInterface
+enum Verify: int
 {
-
+    case  NONE = 0x00;
+    case  PEER = 0x01;
+    case  FAIL_IF_NO_PEER_CERT = 0x02;
+    case  CLIENT_ONCE = 0x04;
+    case  POST_HANDSHAKE = 0x08;
 }

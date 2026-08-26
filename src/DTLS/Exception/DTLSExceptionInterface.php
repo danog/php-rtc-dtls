@@ -9,10 +9,11 @@
  * file that was distributed with this source code.
  */
 
-namespace Webrtc\DTLS\Enum;
+namespace Webrtc\DTLS\DTLS\Exception;
 
-enum SSLHandshakeState: int
+use Webrtc\Exception\WebrtcExceptionInterface;
+
+interface DTLSExceptionInterface extends WebrtcExceptionInterface
 {
-    case Accept = 0;
-    case Connect = 1;
+
 }
