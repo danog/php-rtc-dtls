@@ -51,9 +51,6 @@ use Webrtc\Stats\enum\TLSState;
  */
 class TLS
 {
-    /** @var int Default buffer size for BIO operations */
-    private const BUFFER_SIZE = 1500;
-
     /** @var array Supported cipher suites for the TLS connection */
     private const SUPPORTED_CIPHER_SUITES = [
         // AES-128-GCM-SHA256
@@ -244,7 +241,6 @@ class TLS
     {
         $method = BioMethod::s_mem;
         $bio = new BIO($method);
-        $bio->setBufferSize(self::BUFFER_SIZE);
 
         return $bio;
     }
