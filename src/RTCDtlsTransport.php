@@ -47,9 +47,6 @@ use Webrtc\Srtp\Session;
 use Webrtc\SSL\Exception\OpenSSLException;
 use Webrtc\SSL\Exception\SSLException;
 use Webrtc\SSL\Exception\SysCallException;
-use Webrtc\SSL\Exception\WantReadException;
-use Webrtc\SSL\Exception\WantWriteException;
-use Webrtc\SSL\Exception\WantX509LookupException;
 use Webrtc\SSL\Exception\ZeroReturnException;
 use Webrtc\Stats\enum\TLSState;
 use Webrtc\Stats\RTCStatsReport;
@@ -127,10 +124,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      * @param string $data The plaintext data to send
      * @throws SysCallException If a system call fails
      * @throws OpenSSLException If OpenSSL operations fail
-     * @throws WantReadException If more data needs to be read
-     * @throws WantX509LookupException If certificate lookup is needed
      * @throws TLSException If TLS is not in the correct state
-     * @throws WantWriteException If more data needs to be written
      * @throws ZeroReturnException If the connection was closed
      * @throws SSLException For general SSL errors
      */
@@ -240,8 +234,8 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      */
     private function sendBioData(): void
     {
-        $data = $this->tls->getBio()->read();
-        if ($data && strlen($data) > 0) {
+        $bio = $this->tls->getBio();
+        while (($data = $bio->read()) !== null) {
             $this->send($data);
         }
     }
@@ -515,12 +509,11 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
 
             return;
         }
+        // Flush whatever the engine queued in response — an ack, or the answer to a retransmit.
         $this->sendBioData();
 
-        if (strlen($decryptedData) > 0) {
-            $this->sctpReceiver->onReceived($decryptedData);
-        } else {
-            $this->logger->debug("DTLS: failed decrypted data");
+        if ($decryptedData !== null) {
+            $this->sctpReceiver?->onReceived($decryptedData);
         }
     }
 

@@ -25,9 +25,6 @@ use Webrtc\SSL\Enum\Verify;
 use Webrtc\SSL\Exception\OpenSSLException;
 use Webrtc\SSL\Exception\SSLException;
 use Webrtc\SSL\Exception\SysCallException;
-use Webrtc\SSL\Exception\WantReadException;
-use Webrtc\SSL\Exception\WantWriteException;
-use Webrtc\SSL\Exception\WantX509LookupException;
 use Webrtc\SSL\Exception\ZeroReturnException;
 use Webrtc\SSL\SSL\BIO;
 use Webrtc\SSL\SSL\BIOInterface;
@@ -128,9 +125,6 @@ class TLS
      * @throws OpenSSLException If an OpenSSL error occurs
      * @throws SysCallException If a system call fails
      * @throws TLSException If the TLS connection is not in the correct state
-     * @throws WantReadException If more data needs to be read to complete the operation
-     * @throws WantWriteException If more data needs to be written to complete the operation
-     * @throws WantX509LookupException If certificate lookup is required
      * @throws ZeroReturnException If the connection was closed
      * @throws SSLException For general SSL errors
      */
@@ -142,24 +136,20 @@ class TLS
     }
 
     /**
-     * Decrypts data using the established TLS connection.
+     * Feeds one encrypted datagram into the connection and returns any decrypted application data.
      *
-     * @param string $data The encrypted data to decrypt
-     * @return string The decrypted plaintext data
+     * @param string $data The encrypted datagram to decrypt
+     * @return string|null The decrypted application data, or null if the datagram carried none
      * @throws OpenSSLException If an OpenSSL error occurs
      * @throws SSLException For general SSL errors
-     * @throws SysCallException If a system call fails
      * @throws TLSException If the TLS connection is not in the correct state
-     * @throws WantReadException If more data needs to be read to complete the operation
-     * @throws WantWriteException If more data needs to be written to complete the operation
-     * @throws WantX509LookupException If certificate lookup is required
      * @throws ZeroReturnException If the connection was closed
      */
-    public function decrypt(string $data): string
+    public function decrypt(string $data): ?string
     {
         $this->checkState();
         $this->bio->write($data);
-        return $this->ssl->read(self::BUFFER_SIZE);
+        return $this->ssl->readApplicationData();
     }
 
     /**
@@ -266,9 +256,6 @@ class TLS
      * @throws OpenSSLException If an OpenSSL error occurs
      * @throws SSLException For general SSL errors
      * @throws SysCallException If a system call fails
-     * @throws WantReadException If more data needs to be read to complete the operation
-     * @throws WantWriteException If more data needs to be written to complete the operation
-     * @throws WantX509LookupException If certificate lookup is required
      * @throws ZeroReturnException If the connection was closed
      */
     public function shutdown(): bool
