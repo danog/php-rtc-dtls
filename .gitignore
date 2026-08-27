@@ -3,3 +3,5 @@ composer.lock
 vendor
 .phpunit.cache
 composer.lock
+.phpunit.cache
+composer.lock
