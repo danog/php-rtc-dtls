@@ -2,6 +2,7 @@
 
 namespace Tests\Webrtc\DTLS;
 
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -220,6 +221,7 @@ class RTCDtlsTransportTest extends TestCase
         $this->assertEquals(TLSState::CLOSED, $client->getState());
     }
 
+    #[AllowMockObjectsWithoutExpectations]
     public function testAbruptDisconnect2()
     {
         [$clientIceTransport, $serverIceTransport] = $this->getIceTransportPairMock();
@@ -269,6 +271,7 @@ class RTCDtlsTransportTest extends TestCase
         $client->stop();
     }
 
+    #[AllowMockObjectsWithoutExpectations]
     public function testHandshakeErrorNoCommonSrtpProfile()
     {
         [$clientIceTransport, $serverIceTransport] = $this->getIceTransportPairMock();
