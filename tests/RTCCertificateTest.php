@@ -5,10 +5,12 @@ namespace Tests\Webrtc\DTLS;
 use DateTimeImmutable;
 use DateTimeZone;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Webrtc\DTLS\DTLS\RTCCertificate;
 
 #[CoversClass(RTCCertificate::class)]
+#[UsesClass(\Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint::class)]
 class RTCCertificateTest extends TestCase
 {
     public function testGenerate()

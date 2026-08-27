@@ -30,6 +30,11 @@ use Webrtc\DTLS\SSL\SSL;
 #[CoversClass(Engine::class)]
 #[UsesClass(BIO::class)]
 #[UsesClass(Context::class)]
+#[UsesClass(\Webrtc\DTLS\DTLS\Handshake::class)]
+#[UsesClass(\Webrtc\DTLS\DTLS\Prf::class)]
+#[UsesClass(\Webrtc\DTLS\DTLS\RTCCertificate::class)]
+#[UsesClass(\Webrtc\DTLS\DTLS\Reader::class)]
+#[UsesClass(\Webrtc\DTLS\DTLS\RecordLayer::class)]
 class DtlsHandshakeTest extends TestCase
 {
     private ?DtlsPeer $peer = null;
