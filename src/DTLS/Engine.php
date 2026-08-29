@@ -96,7 +96,10 @@ final class Engine
     /** Sequence number of the next handshake message we send. */
     private int $writeMessageSeq = 0;
 
-    /** Datagrams waiting to be sent. @var list<string> */
+    /** Datagrams waiting to be sent.
+     *
+     * @var list<string>
+     */
     private array $outgoing = [];
     /**
      * The last flight we sent, kept for retransmission as plaintext records.
@@ -119,7 +122,10 @@ final class Engine
         'SRTP_AES128_CM_SHA1_80' => 0x0001,
     ];
 
-    /** SRTP protection profiles we offer, most preferred first. @var array<string, int> */
+    /** SRTP protection profiles we offer, most preferred first.
+     *
+     * @var array<string, int>
+     */
     private array $srtpProfiles = self::SUPPORTED_SRTP_PROFILES;
 
     private float $timeout = self::INITIAL_TIMEOUT;
@@ -200,6 +206,7 @@ final class Engine
      */
     public function takeOutgoing(): array
     {
+        /** @var list<string> $out */
         $out = $this->outgoing;
         $this->outgoing = [];
         return $out;
@@ -235,7 +242,7 @@ final class Engine
         if (microtime(true) < $this->deadline) {
             return false;
         }
-        $this->timeout = min($this->timeout * 2, self::MAX_TIMEOUT);
+        $this->timeout = min($this->timeout + $this->timeout, self::MAX_TIMEOUT);
         $this->deadline = microtime(true) + $this->timeout;
         $this->queueLastFlight();
         return true;
@@ -463,7 +470,7 @@ final class Engine
     {
         $offered = [];
         for ($i = 0; $i + 1 < \strlen($suites); $i += 2) {
-            $offered[] = unpack('n', substr($suites, $i, 2))[1];
+            $offered[] = Handshake::uint16(substr($suites, $i, 2));
         }
         foreach ([self::SUITE_ECDHE_ECDSA_AES128_GCM, self::SUITE_ECDHE_RSA_AES128_GCM] as $candidate) {
             if (\in_array($candidate, $offered, true)) {
@@ -493,7 +500,7 @@ final class Engine
         $reader->skip(2); // server_version
         $this->serverRandom = $reader->take(32);
         $reader->takeVector8(); // session_id
-        $this->cipherSuite = unpack('n', $reader->take(2))[1];
+        $this->cipherSuite = Handshake::uint16($reader->take(2));
         $reader->skip(1); // compression_method
 
         if ($this->cipherSuite !== self::SUITE_ECDHE_ECDSA_AES128_GCM
@@ -528,12 +535,12 @@ final class Engine
         if ($curveType !== 3) {
             throw new SSLException('Only named curves are supported in the key exchange!');
         }
-        $curve = unpack('n', $reader->take(2))[1];
+        $curve = Handshake::uint16($reader->take(2));
         if ($curve !== self::CURVE_SECP256R1) {
             throw new SSLException('Only the secp256r1 curve is supported!');
         }
         $point = $reader->takeVector8();
-        $signatureAlgorithm = unpack('n', $reader->take(2))[1];
+        $signatureAlgorithm = Handshake::uint16($reader->take(2));
         $signature = $reader->takeVector16();
 
         $params = \chr(3).pack('n', self::CURVE_SECP256R1).\chr(\strlen($point)).$point;
@@ -550,7 +557,10 @@ final class Engine
     private function onServerHelloDone(): void
     {
         \assert($this->ecdhePrivate !== null);
-        $point = $this->ecdhePrivate->getPublicKey()->getEncodedCoordinates();
+        $publicKey = $this->ecdhePrivate->getPublicKey();
+        \assert($publicKey instanceof EC\PublicKey);
+        /** @var string $point */
+        $point = $publicKey->getEncodedCoordinates();
 
         $messages = [
             [Handshake::CERTIFICATE, $this->buildCertificate()],
@@ -593,7 +603,7 @@ final class Engine
         );
 
         $reader = new Reader($body);
-        $algorithm = unpack('n', $reader->take(2))[1];
+        $algorithm = Handshake::uint16($reader->take(2));
         $signature = $reader->takeVector16();
 
         $this->verifyPeerSignature($transcript, $signature, $algorithm);
@@ -677,8 +687,10 @@ final class Engine
     private function deriveMasterSecret(string $peerPoint, string $sessionTranscript): string
     {
         \assert($this->ecdhePrivate !== null);
-        $peerKey = EC::loadPublicKey(hex2bin(self::P256_SPKI_PREFIX).$peerPoint);
-        $preMasterSecret = DH::computeSecret($this->ecdhePrivate, $peerKey);
+        $peerKey = EC::loadPublicKey((string) hex2bin(self::P256_SPKI_PREFIX).$peerPoint);
+        \assert($peerKey instanceof EC\PublicKey);
+        /** @var string $preMasterSecret */
+        $preMasterSecret = DH::computeSecret($this->ecdhePrivate, $peerKey->getEncodedCoordinates());
 
         $masterSecret = $this->extendedMasterSecret
             ? Prf::extendedMasterSecret($preMasterSecret, hash('sha256', $sessionTranscript, true))
@@ -711,7 +723,6 @@ final class Engine
         try {
             $x509 = new X509;
             $x509->loadX509($this->peerCertificate);
-            $publicKey = $x509->getPublicKey();
             // SignatureAndHashAlgorithm is {hash, signature}: the hash is the high byte.
             $hash = match (($algorithm >> 8) & 0xFF) {
                 2 => 'sha1',
@@ -721,13 +732,20 @@ final class Engine
                 6 => 'sha512',
                 default => 'sha256',
             };
+            /** @var EC\PublicKey|RSA\PublicKey $publicKey */
+            $publicKey = $x509->getPublicKey();
+            /** @var EC\PublicKey|RSA\PublicKey $publicKey */
             $publicKey = $publicKey->withHash($hash);
-            if ($publicKey instanceof EC\PublicKey) {
-                $publicKey = $publicKey->withSignatureFormat('ASN1');
-            } elseif ($publicKey instanceof RSA\PublicKey) {
+            if ($publicKey instanceof RSA\PublicKey) {
                 // TLS 1.2 rsa_pkcs1_* signatures use PKCS#1 v1.5, while phpseclib defaults to PSS.
+                /** @var RSA\PublicKey $publicKey */
                 $publicKey = $publicKey->withPadding(RSA::SIGNATURE_PKCS1);
             }
+            if ($publicKey instanceof EC\PublicKey) {
+                /** @var EC\PublicKey $publicKey */
+                $publicKey = $publicKey->withSignatureFormat('ASN1');
+            }
+            /** @var bool $valid */
             $valid = $publicKey->verify($data, $signature);
         } catch (Throwable $e) {
             throw new SSLException('Could not verify the peer signature: '.$e->getMessage(), 0, $e);
@@ -810,13 +828,19 @@ final class Engine
     private function buildServerKeyExchange(): string
     {
         \assert($this->ecdhePrivate !== null);
-        $point = $this->ecdhePrivate->getPublicKey()->getEncodedCoordinates();
+        $publicKey = $this->ecdhePrivate->getPublicKey();
+        \assert($publicKey instanceof EC\PublicKey);
+        /** @var string $point */
+        $point = $publicKey->getEncodedCoordinates();
         $params = \chr(3).pack('n', self::CURVE_SECP256R1).\chr(\strlen($point)).$point;
 
-        $signature = $this->certificate->getPrivateKey()
-            ->withSignatureFormat('ASN1')
-            ->withHash('sha256')
-            ->sign($this->clientRandom.$this->serverRandom.$params);
+        $signingKey = $this->certificate->getPrivateKey();
+        /** @var EC\PrivateKey $signingKey */
+        $signingKey = $signingKey->withSignatureFormat('ASN1');
+        /** @var EC\PrivateKey $signingKey */
+        $signingKey = $signingKey->withHash('sha256');
+        /** @var string $signature */
+        $signature = $signingKey->sign($this->clientRandom.$this->serverRandom.$params);
 
         return $params.pack('n', self::SIG_ECDSA_SECP256R1_SHA256)
             .pack('n', \strlen($signature)).$signature;
@@ -833,10 +857,13 @@ final class Engine
 
     private function buildCertificateVerify(string $transcript): string
     {
-        $signature = $this->certificate->getPrivateKey()
-            ->withSignatureFormat('ASN1')
-            ->withHash('sha256')
-            ->sign($transcript);
+        $signingKey = $this->certificate->getPrivateKey();
+        /** @var EC\PrivateKey $signingKey */
+        $signingKey = $signingKey->withSignatureFormat('ASN1');
+        /** @var EC\PrivateKey $signingKey */
+        $signingKey = $signingKey->withHash('sha256');
+        /** @var string $signature */
+        $signature = $signingKey->sign($transcript);
 
         return pack('n', self::SIG_ECDSA_SECP256R1_SHA256).pack('n', \strlen($signature)).$signature;
     }
@@ -849,10 +876,10 @@ final class Engine
         if ($extension === null || \strlen($extension) < 2) {
             return;
         }
-        $length = unpack('n', substr($extension, 0, 2))[1];
+        $length = Handshake::uint16(substr($extension, 0, 2));
         $offered = [];
         for ($i = 0; $i + 1 < $length; $i += 2) {
-            $offered[] = unpack('n', substr($extension, 2 + $i, 2))[1];
+            $offered[] = Handshake::uint16(substr($extension, 2 + $i, 2));
         }
         foreach ($this->srtpProfiles as $name => $id) {
             if (\in_array($id, $offered, true)) {
@@ -870,13 +897,13 @@ final class Engine
         if (\strlen($raw) < 2) {
             return [];
         }
-        $total = unpack('n', substr($raw, 0, 2))[1];
+        $total = Handshake::uint16(substr($raw, 0, 2));
         $offset = 2;
         $end = min(\strlen($raw), 2 + $total);
         $extensions = [];
         while ($offset + 4 <= $end) {
-            $type = unpack('n', substr($raw, $offset, 2))[1];
-            $length = unpack('n', substr($raw, $offset + 2, 2))[1];
+            $type = Handshake::uint16(substr($raw, $offset, 2));
+            $length = Handshake::uint16(substr($raw, $offset + 2, 2));
             $offset += 4;
             if ($offset + $length > $end) {
                 break;

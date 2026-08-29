@@ -20,12 +20,18 @@ use Webrtc\DTLS\Enum\BioMethod;
  * hands a datagram received from the ICE transport to the engine, and {@see self::read()} takes the
  * next datagram the engine wants to put on the wire.
  */
-class BIO implements BIOInterface
+final class BIO implements BIOInterface
 {
-    /** Datagrams received from the network, waiting to be fed to the engine. @var list<string> */
+    /** Datagrams received from the network, waiting to be fed to the engine.
+     *
+     * @var list<string>
+     */
     private array $inbound = [];
 
-    /** Datagrams produced by the engine, waiting to be sent. @var list<string> */
+    /** Datagrams produced by the engine, waiting to be sent.
+     *
+     * @var list<string>
+     */
     private array $outbound = [];
 
     public function __construct(private readonly BioMethod $method = BioMethod::s_mem)
@@ -35,14 +41,17 @@ class BIO implements BIOInterface
     /**
      * Take the next datagram the engine wants to send, or null if there is none.
      */
+#[\Override]
     public function read(): ?string
     {
-        return array_shift($this->outbound);
+        $datagram = array_shift($this->outbound);
+        return \is_string($datagram) ? $datagram : null;
     }
 
     /**
      * Total number of bytes queued for sending.
      */
+#[\Override]
     public function getPendingBytes(): int
     {
         $pending = 0;
@@ -55,6 +64,7 @@ class BIO implements BIOInterface
     /**
      * Queue a datagram received from the network.
      */
+#[\Override]
     public function write(string $buf): int
     {
         if ($buf !== '') {
@@ -68,7 +78,8 @@ class BIO implements BIOInterface
      */
     public function takeInbound(): ?string
     {
-        return array_shift($this->inbound);
+        $datagram = array_shift($this->inbound);
+        return \is_string($datagram) ? $datagram : null;
     }
 
     /**
@@ -87,6 +98,7 @@ class BIO implements BIOInterface
     /**
      * Kept for interface compatibility: there is no native BIO to inspect any more.
      */
+#[\Override]
     public function handleBioErrors(mixed $bio): void
     {
     }

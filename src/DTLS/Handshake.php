@@ -107,7 +107,7 @@ final class Handshake
         while ($offset + self::HEADER_LENGTH <= $total) {
             $type = \ord($payload[$offset]);
             $length = self::uint24(substr($payload, $offset + 1, 3));
-            $messageSeq = unpack('n', substr($payload, $offset + 4, 2))[1];
+            $messageSeq = self::uint16(substr($payload, $offset + 4, 2));
             $fragmentOffset = self::uint24(substr($payload, $offset + 6, 3));
             $fragmentLength = self::uint24(substr($payload, $offset + 9, 3));
             $offset += self::HEADER_LENGTH;
@@ -131,7 +131,7 @@ final class Handshake
                     'received' => [],
                 ];
             }
-            $entry = &$this->pending[$messageSeq];
+            $entry = $this->pending[$messageSeq];
             if ($fragmentLength > 0) {
                 $entry['buffer'] = substr_replace($entry['buffer'], $chunk, $fragmentOffset, $fragmentLength);
             }
@@ -139,7 +139,7 @@ final class Handshake
                 $entry['received'][$fragmentOffset] ?? 0,
                 $fragmentLength
             );
-            unset($entry);
+            $this->pending[$messageSeq] = $entry;
         }
 
         return $this->drain();
@@ -171,6 +171,8 @@ final class Handshake
 
     /**
      * Whether every byte of a message has been received.
+     *
+     * @param array{type: int, length: int, buffer: string, received: array<int, int>} $entry
      */
     private static function isComplete(array $entry): bool
     {
@@ -194,7 +196,17 @@ final class Handshake
      */
     public static function uint24(string $raw): int
     {
-        return unpack('N', "\0".$raw)[1];
+        $value = unpack('N', "\0".$raw);
+        return $value === false ? 0 : (int) $value[1];
+    }
+
+    /**
+     * Decode a 16-bit big endian integer.
+     */
+    public static function uint16(string $raw): int
+    {
+        $value = unpack('n', $raw);
+        return $value === false ? 0 : (int) $value[1];
     }
 
     /**

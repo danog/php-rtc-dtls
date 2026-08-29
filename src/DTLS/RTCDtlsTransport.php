@@ -32,6 +32,7 @@ use Webrtc\RTP\RTCRTPDtlsTransportInterface;
 use Webrtc\RTP\RtpPacket;
 use Webrtc\RTP\RtpRouter;
 use Webrtc\RTP\RtpUtility;
+use Webrtc\RTP\Sender\RTCRtpSender;
 use Webrtc\RTP\Sender\RtpSenderInterface;
 use Webrtc\RTPParameter\RTCRtpReceiveParameters;
 use Webrtc\RTPParameter\RTCRtpSendParameters;
@@ -68,7 +69,7 @@ use Webrtc\Stats\RTCTransportStats;
  *
  * @package Webrtc\DTLS\DTLS
  */
-class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface
+final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface
 {
     use EventForwarder;
 
@@ -90,11 +91,11 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
     /** @var RTCSctpTransportInterface|null SCTP transport for data channels */
     private ?RTCSctpTransportInterface $sctpReceiver = null;
 
-    /** @var Session Inbound SRTP session for decrypting incoming media */
-    private Session $inboundSrtp;
+    /** @var Session|null Inbound SRTP session for decrypting incoming media */
+    private ?Session $inboundSrtp = null;
 
-    /** @var Session Outbound SRTP session for encrypting outgoing media */
-    private Session $outboundSrtp;
+    /** @var Session|null Outbound SRTP session for encrypting outgoing media */
+    private ?Session $outboundSrtp = null;
 
     /** @var TLS The underlying TLS/DTLS implementation */
     private TLS $tls;
@@ -128,6 +129,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      * @throws ZeroReturnException If the connection was closed
      * @throws SSLException For general SSL errors
      */
+#[\Override]
     public function sendData(string $data): void
     {
         $encryptedData = $this->tls->encrypt($data);
@@ -142,13 +144,17 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      * @param string $data The RTP packet to send
      * @throws SrtpException|DTLSException If encryption fails or connection isn't established
      */
+#[\Override]
     public function sendRtp(string $data): void
     {
         if ($this->state !== TLSState::CONNECTED) {
             throw new DTLSException("Unable to send encrypted RTP: No connection established.");
         }
+        if ($this->outboundSrtp === null) {
+            throw new DTLSException("Unable to send encrypted RTP: outbound SRTP session is not initialized.");
+        }
 
-        $encryptedRtp = $this->inboundSrtp->protect($data);
+        $encryptedRtp = $this->outboundSrtp->protect($data);
         $this->send($encryptedRtp);
     }
 
@@ -158,13 +164,17 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      * @param string $data The RTCP packet to send
      * @throws DTLSException|SrtpException If encryption fails or connection isn't established
      */
+#[\Override]
     public function sendRtcp(string $data): void
     {
         if ($this->state !== TLSState::CONNECTED) {
             throw new DTLSException("Unable to send encrypted RTCP: No connection established.");
         }
+        if ($this->outboundSrtp === null) {
+            throw new DTLSException("Unable to send encrypted RTCP: outbound SRTP session is not initialized.");
+        }
 
-        $encryptedRtcp = $this->inboundSrtp->protectRtcp($data);
+        $encryptedRtcp = $this->outboundSrtp->protectRtcp($data);
         $this->send($encryptedRtcp);
     }
 
@@ -256,6 +266,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      *
      * @return RTCTransportStats The transport statistics
      */
+#[\Override]
     public function getReportTransport(): RTCTransportStats
     {
         return $this->reportTransport;
@@ -266,6 +277,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      *
      * @param RTCSctpTransport $param The SCTP transport to remove
      */
+#[\Override]
     public function removeSctpReceiver(RTCSctpTransport $param): void
     {
         // TODO: Implement proper removal logic
@@ -355,6 +367,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      *
      * @return RTCIceTransportInterface The ICE transport
      */
+#[\Override]
     public function getIceTransport(): RTCIceTransportInterface
     {
         return $this->transport;
@@ -386,6 +399,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      *
      * @return TLSState The current state
      */
+#[\Override]
     public function getState(): TLSState
     {
         return $this->state;
@@ -417,6 +431,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      *
      * @param RTCSctpTransportInterface|null $sctpReceiver The SCTP transport to set
      */
+#[\Override]
     public function setSctpReceiver(?RTCSctpTransportInterface $sctpReceiver = null): void
     {
         $this->sctpReceiver = $sctpReceiver;
@@ -478,7 +493,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      *
      * @throws DTLSException Always throws to indicate connection loss
      */
-    private function handleDisconnectingError()
+    private function handleDisconnectingError(): never
     {
         $this->setState(TLSState::CLOSED);
         $this->logger?->alert("DTLS: Connection lost");
@@ -527,11 +542,14 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
     {
         $arrivalTimeMs = NetworkTimeProtocol::currentMs();
         try {
+            if ($this->inboundSrtp === null) {
+                throw new DTLSException("Unable to process incoming SRTP: inbound SRTP session is not initialized.");
+            }
             if (RtpUtility::isRtcp($data)) {
-                $decryptedRtcp = $this->outboundSrtp->unprotectRtcp($data);
+                $decryptedRtcp = $this->inboundSrtp->unprotectRtcp($data);
                 $this->handleRtcpData($decryptedRtcp);
             } else {
-                $decryptedRtp = $this->outboundSrtp->unprotect($data);
+                $decryptedRtp = $this->inboundSrtp->unprotect($data);
                 $this->handleRtpData($decryptedRtp, $arrivalTimeMs);
             }
         } catch (SrtpExceptionInterface $e) {
@@ -557,7 +575,9 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
 
         foreach ($packets as $packet) {
             // Route RTCP packet
-            foreach ($this->rtpRouter->routeRtcp($packet) as $recipient) {
+            /** @var array<int, RTCRtpSender|RtpReceiverInterface> $recipients */
+            $recipients = $this->rtpRouter->routeRtcp($packet);
+            foreach ($recipients as $recipient) {
                 $recipient->handleRtcpPacket($packet);
             }
         }
@@ -604,6 +624,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      * @param RtpReceiverInterface $receiver The RTP receiver to register
      * @param RTCRtpReceiveParameters $parameters The receiver parameters
      */
+#[\Override]
     public function setRtpReceiver(RtpReceiverInterface $receiver, RTCRtpReceiveParameters $parameters): void
     {
         $ssrcs = [];
@@ -625,6 +646,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      *
      * @param RtpReceiverInterface $receiver The receiver to remove
      */
+#[\Override]
     public function removeRtpReceiver(RtpReceiverInterface $receiver): void
     {
         $this->rtpRouter->removeReceiver($receiver);
@@ -636,10 +658,21 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      * @param RtpSenderInterface $sender The RTP sender to register
      * @param RTCRtpSendParameters $parameters The sender parameters
      */
+#[\Override]
     public function setRtpSender(RtpSenderInterface $sender, RTCRtpSendParameters $parameters): void
     {
         $this->headerExtensionsMap->configure($parameters);
-        $this->rtpRouter->setSender($sender, $sender->getSsrc());
+
+        $ssrc = null;
+        foreach ($parameters->encodings as $encoding) {
+            $ssrc = $encoding->ssrc;
+            break;
+        }
+        if ($ssrc === null) {
+            throw new DTLSException('No usable SSRC in the sender parameters!');
+        }
+
+        $this->rtpRouter->setSender($sender, $ssrc);
     }
 
     /**
@@ -647,6 +680,7 @@ class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterf
      *
      * @param RtpSenderInterface $sender The sender to remove
      */
+#[\Override]
     public function removeRtpSender(RtpSenderInterface $sender): void
     {
         $this->rtpRouter->removeSender($sender);

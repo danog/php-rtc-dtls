@@ -49,7 +49,7 @@ use Webrtc\Stats\enum\TLSState;
  *
  * @package Webrtc\DTLS\DTLS\TLS
  */
-class TLS
+final class TLS
 {
     /** @var array Supported cipher suites for the TLS connection */
     private const SUPPORTED_CIPHER_SUITES = [
@@ -72,8 +72,8 @@ class TLS
     /** @var Context The SSL context */
     private Context $context;
 
-    /** @var BIOInterface The BIO buffer for SSL operations */
-    private BIOInterface $bio;
+    /** @var BIO The BIO buffer for SSL operations */
+    private BIO $bio;
 
     /** @var TLSState Current state of the TLS connection */
     private TLSState $state = TLSState::NEW;
@@ -129,7 +129,7 @@ class TLS
     {
         $this->checkState();
         $this->ssl->write($data);
-        return $this->bio->read();
+        return (string) $this->bio->read();
     }
 
     /**
@@ -174,7 +174,7 @@ class TLS
         $this->checkState();
         $peerCertDigits = $this->ssl->getPeerCertificateDigest();
 
-        return array_any($peerCerts, fn(RTCDtlsFingerprint $cert) => $cert->isAlgorithm("sha-256") && strtolower($cert->value) === strtolower($peerCertDigits));
+        return array_any($peerCerts, fn(RTCDtlsFingerprint $cert) => $cert->isAlgorithm("sha-256") && strtolower($cert->value) === strtolower($peerCertDigits ?? ''));
     }
 
     /**
@@ -213,9 +213,9 @@ class TLS
     private function createContext(): Context
     {
         $ctx = new Context(ContextMethod::DTLS_METHOD);
-        $ctx->setVerify(Verify::PEER->value | Verify::FAIL_IF_NO_PEER_CERT->value, fn(...$args) => true);
+        $ctx->setVerify(Verify::PEER->value | Verify::FAIL_IF_NO_PEER_CERT->value, fn(mixed ...$args): bool => true);
         $ctx->setCipherList(implode(":", self::SUPPORTED_CIPHER_SUITES));
-        $ctx->setTlsextUseSrtp(implode(":", array_map(fn($profile) => $profile["sslProfile"], Srtp::getProfiles())));
+        $ctx->setTlsextUseSrtp(implode(":", array_map(static fn(array $profile): string => $profile["sslProfile"], Srtp::getProfiles())));
         $this->setCertAndPrivateKey($ctx);
         $this->setLoggerInfo($ctx);
 
@@ -235,9 +235,9 @@ class TLS
     /**
      * Creates the BIO buffer for SSL operations.
      *
-     * @return BIOInterface The created BIO buffer
+     * @return BIO The created BIO buffer
      */
-    private function createBIO(): BIOInterface
+    private function createBIO(): BIO
     {
         $method = BioMethod::s_mem;
         $bio = new BIO($method);

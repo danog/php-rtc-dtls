@@ -59,7 +59,10 @@ final class RecordLayer
     private ?string $readKey = null;
     private ?string $readSalt = null;
 
-    /** Highest sequence number accepted per epoch, for replay detection. */
+    /** Highest sequence number accepted per epoch, for replay detection.
+     *
+     * @var array<int, array<int, true>>
+     */
     private array $readSequences = [];
 
     /**
@@ -137,6 +140,7 @@ final class RecordLayer
         // The explicit nonce only has to be unique per key; peers are free to use a random one,
         // so it must never be confused with the record's sequence number.
         $explicit = self::sequence($epoch, $sequence) ^ $this->explicitNonceMask;
+        \assert($this->writeSalt !== null);
         $nonce = $this->writeSalt.$explicit;
         // RFC 5246 section 6.2.3.3: the additional data is built from the record's own epoch and
         // sequence number, not from the explicit nonce carried in the payload.
@@ -170,9 +174,9 @@ final class RecordLayer
         while ($offset + self::HEADER_LENGTH <= $total) {
             $type = \ord($datagram[$offset]);
             $version = substr($datagram, $offset + 1, 2);
-            $epoch = unpack('n', substr($datagram, $offset + 3, 2))[1];
+            $epoch = Handshake::uint16(substr($datagram, $offset + 3, 2));
             $sequence = self::parseSequence(substr($datagram, $offset + 5, 6));
-            $length = unpack('n', substr($datagram, $offset + 11, 2))[1];
+            $length = Handshake::uint16(substr($datagram, $offset + 11, 2));
             $offset += self::HEADER_LENGTH;
 
             if ($offset + $length > $total) {
@@ -215,6 +219,7 @@ final class RecordLayer
             try {
                 $aes = new AES('gcm');
                 $aes->setKey($this->readKey);
+                \assert($this->readSalt !== null);
                 $aes->setNonce($this->readSalt.$explicit);
                 $aes->setAAD($aad);
                 $aes->setTag($tag);
@@ -243,7 +248,8 @@ final class RecordLayer
      */
     private static function parseSequence(string $raw): int
     {
-        return unpack('J', "\0\0".$raw)[1];
+        $value = unpack('J', "\0\0".$raw);
+        return $value === false ? 0 : (int) $value[1];
     }
 
     /**

@@ -66,7 +66,7 @@ final class Reader
      */
     public function takeVector16(): string
     {
-        return $this->take(unpack('n', $this->take(2))[1]);
+        return $this->take(Handshake::uint16($this->take(2)));
     }
 
     /**

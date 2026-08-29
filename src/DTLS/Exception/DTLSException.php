@@ -11,7 +11,7 @@
 
 namespace Webrtc\DTLS\DTLS\Exception;
 
-class DTLSException extends \Exception implements DTLSExceptionInterface
+final class DTLSException extends \Exception implements DTLSExceptionInterface
 {
 
 }

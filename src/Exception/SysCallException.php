@@ -11,7 +11,7 @@
 
 namespace Webrtc\DTLS\Exception;
 
-class SysCallException extends OpenSSLException
+final class SysCallException extends OpenSSLException
 {
 
 }

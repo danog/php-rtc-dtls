@@ -16,7 +16,7 @@ class IceTransportMock extends EventEmitter implements RTCIceTransportInterface
     {
     }
 
-    public function send(string $bytes)
+    public function send(string $bytes): void
     {
         $this->emit('send', [$bytes]);
     }

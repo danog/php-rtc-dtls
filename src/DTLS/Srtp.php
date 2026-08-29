@@ -29,7 +29,7 @@ use Webrtc\Srtp\Session;
  * This class supports multiple SRTP cryptographic profiles, manages inbound and outbound
  * sessions, and handles key derivation from DTLS key material.
  */
-class Srtp
+final class Srtp
 {
     /**
      * The Size of the replay protection window for SRTP packets
@@ -45,6 +45,8 @@ class Srtp
      * - sslProfile: The corresponding SSL profile string identifier
      * - keyLength: Length of the encryption key in bytes
      * - saltLent: Length of the salt value in bytes
+     *
+     * @var list<array{srtpProfile: SrtpProfile, sslProfile: string, keyLength: int, saltLent: int}>
      */
     public const DEFAULT_PROFILES = [
         [
@@ -70,9 +72,9 @@ class Srtp
     /**
      * The currently selected SRTP profile configuration
      *
-     * @var array
+     * @var array{srtpProfile: SrtpProfile, sslProfile: string, keyLength: int, saltLent: int}|null
      */
-    private array $profile;
+    private ?array $profile = null;
 
     /**
      * Initializes the SRTP library and creates a new Srtp instance
@@ -88,7 +90,7 @@ class Srtp
      *
      * Attempts to create a Policy with the specified profile to check its availability
      *
-     * @param array $profile Array containing profile configuration details
+     * @param array{srtpProfile: SrtpProfile, sslProfile: string, keyLength: int, saltLent: int} $profile Array containing profile configuration details
      * @return bool True if the profile is available, false otherwise
      */
     private static function checkAvailabilityProfile(array $profile): bool
@@ -106,7 +108,7 @@ class Srtp
      *
      * Iterates through DEFAULT_PROFILES and filters only those supported by the system
      *
-     * @return array List of available SRTP profiles
+     * @return list<array{srtpProfile: SrtpProfile, sslProfile: string, keyLength: int, saltLent: int}> List of available SRTP profiles
      * @throws SrtpException If the SRTP library fails to initialize
      */
     public static function getProfiles(): array
@@ -128,7 +130,7 @@ class Srtp
      * and set it as the current profile if found
      *
      * @param string $selectedSrtpProfile The SSL profile name to search for
-     * @return array|false The matched profile configuration or false if not found
+     * @return array{srtpProfile: SrtpProfile, sslProfile: string, keyLength: int, saltLent: int}|false The matched profile configuration or false if not found
      * @throws SrtpException If the SRTP library fails to initialize during profile retrieval
      */
     public function getProfile(string $selectedSrtpProfile): array|false
@@ -185,14 +187,15 @@ class Srtp
      */
     public function generateKey(string $srtpKeyMaterial, int $index): string
     {
-        if (!$this->profile) {
+        $profile = $this->profile;
+        if ($profile === null) {
             throw new DTLSException("Profile is not set");
         }
 
-        $keyStart = $index * $this->profile["keyLength"];
-        $saltStart = 2 * $this->profile["keyLength"] + $index * $this->profile["saltLent"];
+        $keyStart = $index * $profile["keyLength"];
+        $saltStart = 2 * $profile["keyLength"] + $index * $profile["saltLent"];
 
-        return substr($srtpKeyMaterial, $keyStart, $this->profile["keyLength"]) . substr($srtpKeyMaterial, $saltStart, $this->profile["saltLent"]);
+        return substr($srtpKeyMaterial, $keyStart, $profile["keyLength"]) . substr($srtpKeyMaterial, $saltStart, $profile["saltLent"]);
     }
 
     /**
@@ -209,9 +212,13 @@ class Srtp
      */
     private function getSession(string $srtpKeyMaterial, int $index, SsrcType $ssrcType): Session
     {
+        $profile = $this->profile;
+        if ($profile === null) {
+            throw new DTLSException("Profile is not set");
+        }
         $key = $this->generateKey($srtpKeyMaterial, $index);
 
-        $policy = new Policy($this->profile["srtpProfile"], $key, $ssrcType);
+        $policy = new Policy($profile["srtpProfile"], $key, $ssrcType);
         $policy->setAllowRepeatTx(true);
         $policy->setWindowSize(self::WINDOW_SIZE);
 
@@ -221,7 +228,7 @@ class Srtp
     /**
      * Sets the active SRTP profile configuration
      *
-     * @param array $profile The profile configuration to set
+     * @param array{srtpProfile: SrtpProfile, sslProfile: string, keyLength: int, saltLent: int} $profile The profile configuration to set
      * @return void
      */
     public function setProfile(array $profile): void

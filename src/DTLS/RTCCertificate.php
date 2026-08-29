@@ -35,7 +35,7 @@ use Throwable;
  *
  * @package Webrtc\DTLS\DTLS
  */
-class RTCCertificate
+final class RTCCertificate
 {
     /** @var string Default country for a certificate subject */
     private const COUNTRY = "US";
@@ -105,6 +105,7 @@ class RTCCertificate
         $this->privateKey = $key;
 
         $x509 = new X509;
+        /** @var array<array-key, mixed>|false $parsed */
         $parsed = $x509->loadX509($certificate);
         if ($parsed === false) {
             throw new RTCCertificateException('Could not parse the certificate!');
@@ -152,7 +153,6 @@ class RTCCertificate
     {
         try {
             $key = EC::createKey('secp256r1');
-            \assert($key instanceof PrivateKey);
             $this->privateKey = $key;
 
             $dn = [
@@ -164,7 +164,9 @@ class RTCCertificate
             ];
 
             $subject = new X509;
-            $subject->setPublicKey($key->getPublicKey());
+            /** @var \phpseclib3\Crypt\Common\PublicKey $subjectPublicKey */
+            $subjectPublicKey = $key->getPublicKey();
+            $subject->setPublicKey($subjectPublicKey);
             $subject->setDN($dn);
 
             $issuer = new X509;
@@ -177,6 +179,7 @@ class RTCCertificate
             $authority->setEndDate(self::VALIDITY);
             $authority->setSerialNumber((string) random_int(1, PHP_INT_MAX), 10);
 
+            /** @var array<array-key, mixed>|false $signed */
             $signed = $authority->sign($issuer, $subject);
             if ($signed === false) {
                 throw new RTCCertificateException('Could not sign the generated certificate!');
@@ -209,8 +212,13 @@ class RTCCertificate
      */
     private static function parseExpiry(array $certificate): DateTimeImmutable
     {
-        $validity = $certificate['tbsCertificate']['validity']['notAfter'] ?? [];
-        $date = $validity['utcTime'] ?? $validity['generalTime'] ?? null;
+        /** @var array<string, mixed> $tbs */
+        $tbs = $certificate['tbsCertificate'] ?? [];
+        /** @var array<string, mixed> $validity */
+        $validity = $tbs['validity'] ?? [];
+        /** @var array{utcTime?: string, generalTime?: string} $notAfter */
+        $notAfter = $validity['notAfter'] ?? [];
+        $date = $notAfter['utcTime'] ?? $notAfter['generalTime'] ?? null;
         try {
             return $date !== null ? new DateTimeImmutable($date) : new DateTimeImmutable(self::VALIDITY);
         } catch (Throwable) {

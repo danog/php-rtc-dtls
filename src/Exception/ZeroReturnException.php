@@ -11,7 +11,7 @@
 
 namespace Webrtc\DTLS\Exception;
 
-class ZeroReturnException extends OpenSSLException
+final class ZeroReturnException extends OpenSSLException
 {
 
 }

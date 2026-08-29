@@ -23,7 +23,7 @@ use Webrtc\DTLS\Exception\ZeroReturnException;
  * that the transport and handshake drivers did not have to change when the FFI binding was
  * replaced by a native implementation.
  */
-class SSL implements SSLInterface
+final class SSL implements SSLInterface
 {
     private Engine $engine;
 
@@ -41,11 +41,13 @@ class SSL implements SSLInterface
         $this->engine = new Engine($certificate, $context->getSrtpProfiles());
     }
 
+#[\Override]
     public function setAcceptState(): void
     {
         $this->engine->setAcceptState();
     }
 
+#[\Override]
     public function setConnectState(): void
     {
         $this->engine->setConnectState();
@@ -60,6 +62,7 @@ class SSL implements SSLInterface
      * @return bool True once the handshake is complete, false if it still needs another datagram.
      * @throws SSLException On a fatal protocol violation.
      */
+#[\Override]
     public function doHandshake(): bool
     {
         $this->engine->startHandshake();
@@ -82,21 +85,25 @@ class SSL implements SSLInterface
         }
     }
 
+#[\Override]
     public function getPeerCertificateDigest(): ?string
     {
         return $this->engine->getPeerCertificateDigest();
     }
 
+#[\Override]
     public function getSelectedSrtpProfile(): string
     {
         return $this->engine->getSelectedSrtpProfile();
     }
 
+#[\Override]
     public function exportKeyingMaterial(string $label, int $keyLength, ?string $context = null): string
     {
         return $this->engine->exportKeyingMaterial($label, $keyLength, $context);
     }
 
+#[\Override]
     public function shutdown(): bool
     {
         $result = $this->engine->shutdown();
@@ -107,6 +114,7 @@ class SSL implements SSLInterface
     /**
      * Seconds until the current handshake flight must be retransmitted, if a timer is armed.
      */
+#[\Override]
     public function dtlsV1GetTimeout(): ?float
     {
         return $this->engine->getTimeout();
@@ -115,6 +123,7 @@ class SSL implements SSLInterface
     /**
      * Retransmit the last flight if its timer expired.
      */
+#[\Override]
     public function dtlsV1HandleTimeout(): bool
     {
         $retransmitted = $this->engine->handleTimeout();
@@ -131,6 +140,7 @@ class SSL implements SSLInterface
      * @return string|null The decrypted application data, or null if none has arrived.
      * @throws ZeroReturnException If the peer has closed the connection.
      */
+#[\Override]
     public function readApplicationData(): ?string
     {
         while (($datagram = $this->bio->takeInbound()) !== null) {
@@ -156,6 +166,7 @@ class SSL implements SSLInterface
      *
      * @throws SSLException If the handshake has not completed.
      */
+#[\Override]
     public function write(string $buf, int $flags = 0): void
     {
         $this->engine->write($buf);

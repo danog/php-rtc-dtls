@@ -11,7 +11,7 @@
 
 namespace Webrtc\DTLS\DTLS\Exception;
 
-class HandshakeException extends \Exception implements DTLSExceptionInterface
+final class HandshakeException extends \Exception implements DTLSExceptionInterface
 {
 
 }

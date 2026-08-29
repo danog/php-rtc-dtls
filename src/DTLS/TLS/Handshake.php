@@ -33,7 +33,7 @@ use Webrtc\Stats\enum\TLSState;
  *
  * @package Webrtc\DTLS\DTLS\TLS
  */
-class Handshake
+final class Handshake
 {
     use EventForwarder;
 
@@ -43,8 +43,8 @@ class Handshake
     /** @var SSLInterface The SSL context for the handshake */
     private SSLInterface $ssl;
 
-    /** @var RTCIceTransportInterface|null The transport layer for sending/receiving data */
-    private ?RTCIceTransportInterface $transport;
+    /** @var RTCIceTransportInterface The transport layer for sending/receiving data */
+    private RTCIceTransportInterface $transport;
 
     /** @var BIOInterface The BIO buffer for SSL operations */
     private BIOInterface $bio;
@@ -55,7 +55,10 @@ class Handshake
     /** @var bool Whether a handshake step is already queued on the event loop */
     private bool $advanceScheduled = false;
 
-    /** @var array Listeners for transport events */
+    /** @var array Listeners for transport events
+     *
+     * @var array<callable>
+     */
     private array $listeners;
 
     /**
@@ -88,7 +91,7 @@ class Handshake
      */
     private function receive(string $bytes): void
     {
-        if ($this->timer) {
+        if ($this->timer !== null) {
             EventLoop::cancel($this->timer);
             $this->timer = null;
         }
@@ -168,7 +171,7 @@ class Handshake
             $this->sendBIOData();
         } catch (Throwable $e) {
             $this->teardown();
-            $this->deferred->error(new HandshakeException("Handshake Failed", $e->getCode(), $e));
+            $this->deferred->error(new HandshakeException("Handshake Failed", (int) $e->getCode(), $e));
             return;
         }
         // A deadline that has already elapsed is reported as 0.0, which a truthiness test

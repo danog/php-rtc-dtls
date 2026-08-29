@@ -21,7 +21,7 @@ use Psr\Log\LoggerInterface;
  * Upstream this wrapped an OpenSSL `SSL_CTX`. Since the DTLS engine is now written in PHP, it is
  * simply the place where the local certificate, the offered SRTP profiles and the logger live.
  */
-class Context
+final class Context
 {
     private ?RTCCertificate $certificate = null;
 
