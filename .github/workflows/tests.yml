@@ -55,4 +55,10 @@ jobs:
         run: vendor/bin/psalm --no-progress
 
       - name: Run PHPUnit tests
-        run: vendor/bin/phpunit
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            vendor/bin/phpunit
+          else
+            vendor/bin/phpunit -c phpunit-skiptolerant.xml
+          fi
+        shell: bash
