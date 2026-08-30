@@ -633,10 +633,16 @@ final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransport
         }
 
         $this->headerExtensionsMap->configure($parameters);
+        $payloadTypes = [];
+        foreach ($parameters->codecs as $codec) {
+            assert($codec->payloadType !== null);
+            $payloadTypes[] = $codec->payloadType;
+        }
+
         $this->rtpRouter->setReceiver(
             $receiver,
             $ssrcs,
-            array_map(fn($codec) => $codec->payloadType, $parameters->codecs),
+            $payloadTypes,
             $parameters->muxId
         );
     }

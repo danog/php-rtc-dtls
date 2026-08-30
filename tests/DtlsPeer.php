@@ -30,7 +30,7 @@ final class DtlsPeer
     public static function locate(): self
     {
         $binary = getenv('PHP_RTC_REFERENCE_DTLS')
-            ?: __DIR__ . '/../../reference/bin/refpeer-dtls';
+            ?: __DIR__ . '/../reference/bin/refpeer-dtls';
 
         if (!is_file($binary) || !is_executable($binary)) {
             Assert::markTestSkipped(
