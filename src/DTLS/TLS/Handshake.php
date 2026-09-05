@@ -145,10 +145,16 @@ final class Handshake implements EventForwarderHost
             return;
         }
         $this->advanceScheduled = true;
-        EventLoop::queue(function (): void {
+        EventLoop::queue($this->runScheduledAdvance(...));
+    }
+
+    /**
+     * Advance one handshake step. Public so unserialize can re-queue it.
+     */
+    public function runScheduledAdvance(): void
+    {
             $this->advanceScheduled = false;
             $this->advance();
-        });
     }
 
     /**
@@ -295,6 +301,10 @@ final class Handshake implements EventForwarderHost
             if ($timeout !== null) {
                 $this->handleDTLSTimeout($timeout);
             }
+        }
+        if ($this->advanceScheduled) {
+            $this->advanceScheduled = false;
+            $this->scheduleAdvance();
         }
     }
 }
