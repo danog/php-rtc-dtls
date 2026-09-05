@@ -19,6 +19,8 @@ use Webrtc\DTLS\DTLS\Enum\SSLHandshakeState;
 use Webrtc\DTLS\DTLS\Exception\HandshakeException;
 use Webrtc\ICE\RTCIceTransportInterface;
 use Webrtc\Mixin\EventForwarder;
+use Webrtc\Mixin\EventForwarderHost;
+use Webrtc\Mixin\SerializableState;
 use Webrtc\DTLS\Exception\OpenSSLException;
 use Webrtc\DTLS\SSL\BIOInterface;
 use Webrtc\DTLS\SSL\SSLInterface;
@@ -33,7 +35,7 @@ use Webrtc\Stats\enum\TLSState;
  *
  * @package Webrtc\DTLS\DTLS\TLS
  */
-final class Handshake
+final class Handshake implements EventForwarderHost
 {
     use EventForwarder;
 
@@ -210,16 +212,7 @@ final class Handshake
      */
     private function handleDTLSTimeout(float $timeout): void
     {
-        $this->timer = EventLoop::delay($timeout, function () {
-            $this->timer = null;
-            $this->ssl->dtlsV1HandleTimeout();
-            $this->sendBIOData();
-            // With no poll to re-arm it, the timer has to schedule its own next backoff; otherwise
-            // a second consecutive loss would never be retransmitted and the handshake would stall.
-            if (($timeout = $this->ssl->dtlsV1GetTimeout()) !== null) {
-                $this->handleDTLSTimeout($timeout);
-            }
-        });
+        $this->timer = EventLoop::delay($timeout, $this->onDtlsTimeout(...));
     }
 
     /**
@@ -256,5 +249,52 @@ final class Handshake
     private function removeMessageListener(): void
     {
         $this->transport->removeListener('data', $this->listeners[0]);
+    }
+
+    /**
+     * Retransmit-timer callback. Public so it can be rescheduled after unserialize.
+     */
+    public function onDtlsTimeout(): void
+    {
+        $this->timer = null;
+        $this->ssl->dtlsV1HandleTimeout();
+        $this->sendBIOData();
+        if (($timeout = $this->ssl->dtlsV1GetTimeout()) !== null) {
+            $this->handleDTLSTimeout($timeout);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function __serialize(): array
+    {
+        return SerializableState::export($this, [
+            'deferred' => null,
+            'timer' => $this->timer !== null,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        $restartTimer = false;
+        foreach ($data as $key => $value) {
+            if (is_string($key) && str_ends_with($key, "\0timer")) {
+                $restartTimer = $value === true;
+                $data[$key] = null;
+            }
+        }
+        SerializableState::import($this, $data);
+        $this->deferred = new DeferredFuture();
+        $this->timer = null;
+        if ($restartTimer) {
+            $timeout = $this->ssl->dtlsV1GetTimeout();
+            if ($timeout !== null) {
+                $this->handleDTLSTimeout($timeout);
+            }
+        }
     }
 }

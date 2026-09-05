@@ -22,6 +22,7 @@ use Webrtc\DTLS\DTLS\TLS\TLS;
 use Webrtc\ICE\Enum\IceRole;
 use Webrtc\ICE\RTCIceTransportInterface;
 use Webrtc\Mixin\EventForwarder;
+use Webrtc\Mixin\EventForwarderHost;
 use Webrtc\NTP\NetworkTimeProtocol;
 use Webrtc\RTCP\Exception\RtcpExceptionInterface;
 use Webrtc\RTCP\RtcpPacket;
@@ -69,7 +70,7 @@ use Webrtc\Stats\RTCTransportStats;
  *
  * @package Webrtc\DTLS\DTLS
  */
-final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface
+final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface, EventForwarderHost
 {
     use EventForwarder;
 
