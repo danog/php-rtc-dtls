@@ -40,7 +40,7 @@
         "danog/php-rtc-sctp": "^1.1.5",
         "danog/php-rtc-stats": "^1.1.3",
         "danog/php-rtc-sdp": "^1.1.6",
-        "danog/php-rtc-mixin": "^1.1.6",
+        "danog/php-rtc-mixin": "^2.0",
         "danog/php-rtc-srtp": "^1.1.7",
         "evenement/evenement": "^3.0.2",
         "symfony/polyfill-php84": "*",
