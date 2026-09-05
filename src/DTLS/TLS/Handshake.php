@@ -287,8 +287,11 @@ final class Handshake implements EventForwarderHost
     public function __unserialize(array $data): void
     {
         $restartTimer = false;
+        /**
+         * @var mixed $value
+         */
         foreach ($data as $key => $value) {
-            if (is_string($key) && str_ends_with($key, "\0timer")) {
+            if (str_ends_with($key, "\0timer")) {
                 $restartTimer = $value === true;
                 $data[$key] = null;
             }
