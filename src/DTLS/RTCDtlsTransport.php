@@ -20,9 +20,9 @@ use Webrtc\DTLS\DTLS\Exception\DTLSException;
 use Webrtc\DTLS\DTLS\Exception\TLSException;
 use Webrtc\DTLS\DTLS\TLS\TLS;
 use Webrtc\ICE\Enum\IceRole;
+use Webrtc\ICE\Listener\IceTransportDataListener;
+use Webrtc\ICE\Listener\IceTransportDisconnectListener;
 use Webrtc\ICE\RTCIceTransportInterface;
-use Webrtc\Mixin\EventForwarder;
-use Webrtc\Mixin\EventForwarderHost;
 use Webrtc\NTP\NetworkTimeProtocol;
 use Webrtc\RTCP\Exception\RtcpExceptionInterface;
 use Webrtc\RTCP\RtcpPacket;
@@ -70,10 +70,8 @@ use Webrtc\Stats\RTCTransportStats;
  *
  * @package Webrtc\DTLS\DTLS
  */
-final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface, EventForwarderHost
+final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface, IceTransportDataListener, IceTransportDisconnectListener
 {
-    use EventForwarder;
-
     /** @var TLSState Current state of the DTLS transport */
     private TLSState $state = TLSState::NEW;
 
@@ -117,7 +115,27 @@ final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransport
         $this->reportTransport = new RTCTransportStats("transport_" . spl_object_id($this));
         $this->rtpRouter = new RtpRouter();
         $this->headerExtensionsMap = new HeaderExtensionsMap();
-        $this->forwardEvents2Methods($transport, ['close' => 'handleDisconnectingError', 'error' => 'handleDisconnectingError']);
+        $transport->addDisconnectListener($this);
+    }
+
+    /**
+     * Handle a disconnecting close/error reported by the ICE transport (was the 'close'/'error'
+     * events). Typed replacement registered via addDisconnectListener().
+     */
+    #[\Override]
+    public function onIceTransportDisconnect(): void
+    {
+        $this->handleDisconnectingError();
+    }
+
+    /**
+     * Receive application data from the ICE transport (was the 'data' event). Typed replacement
+     * registered via addDataListener().
+     */
+    #[\Override]
+    public function onIceTransportData(string $data, int $componentId): void
+    {
+        $this->onReceivedData($data);
     }
 
     /**
@@ -336,8 +354,8 @@ final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransport
             return;
         }
 
-        // Register onReceivedData method
-        $this->forwardEvents2Methods($this->transport, ['data' => 'onReceivedData']);
+        // Deliver post-handshake application data to onReceivedData() via onIceTransportData().
+        $this->transport->addDataListener($this);
 
         // Set success log and state
         $this->logger?->debug("DTLS: Successful handshake");

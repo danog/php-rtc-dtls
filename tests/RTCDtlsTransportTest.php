@@ -379,12 +379,12 @@ class RTCDtlsTransportTest extends TestCase
 
         $server->on('send', function ($data) use ($client, $drops) {
             if (!$drops->shouldDrop() && !$this->disconnect) {
-                $client->emit("data", [$data]);
+                $client->deliver($data);
             }
         });
         $client->on('send', function ($data) use ($server, $drops) {
             if (!$drops->shouldDrop() && !$this->disconnect) {
-                $server->emit("data", [$data]);
+                $server->deliver($data);
             }
         });
     }

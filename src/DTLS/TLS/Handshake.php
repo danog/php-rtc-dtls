@@ -17,9 +17,8 @@ use Revolt\EventLoop;
 use Throwable;
 use Webrtc\DTLS\DTLS\Enum\SSLHandshakeState;
 use Webrtc\DTLS\DTLS\Exception\HandshakeException;
+use Webrtc\ICE\Listener\IceTransportDataListener;
 use Webrtc\ICE\RTCIceTransportInterface;
-use Webrtc\Mixin\EventForwarder;
-use Webrtc\Mixin\EventForwarderHost;
 use Webrtc\Mixin\SerializableState;
 use Webrtc\DTLS\Exception\OpenSSLException;
 use Webrtc\DTLS\SSL\BIOInterface;
@@ -35,10 +34,8 @@ use Webrtc\Stats\enum\TLSState;
  *
  * @package Webrtc\DTLS\DTLS\TLS
  */
-final class Handshake implements EventForwarderHost
+final class Handshake implements IceTransportDataListener
 {
-    use EventForwarder;
-
     /** @var DeferredFuture Settled when the handshake finishes or fails */
     private DeferredFuture $deferred;
 
@@ -57,12 +54,6 @@ final class Handshake implements EventForwarderHost
     /** @var bool Whether a handshake step is already queued on the event loop */
     private bool $advanceScheduled = false;
 
-    /** @var array Listeners for transport events
-     *
-     * @var array<callable>
-     */
-    private array $listeners;
-
     /**
      * Handshake constructor.
      *
@@ -79,7 +70,17 @@ final class Handshake implements EventForwarderHost
         $this->ssl = $tls->getSsl();
         $this->bio = $tls->getBio();
         $this->setSSLHandshakeState();
-        $this->listeners = $this->forwardEvents2Methods($this->transport, ['data' => 'receive']);
+        $this->transport->addDataListener($this);
+    }
+
+    /**
+     * Receive application data from the ICE transport (was the 'data' event). Typed replacement
+     * registered via addDataListener().
+     */
+    #[\Override]
+    public function onIceTransportData(string $data, int $componentId): void
+    {
+        $this->receive($data);
     }
 
     /**
@@ -258,7 +259,7 @@ final class Handshake implements EventForwarderHost
      */
     private function removeMessageListener(): void
     {
-        $this->transport->removeListener('data', $this->listeners[0]);
+        $this->transport->removeDataListener($this);
     }
 
     /**
@@ -284,7 +285,9 @@ final class Handshake implements EventForwarderHost
     public function __serialize(): array
     {
         return SerializableState::export($this, [
-            'deferred' => null,
+            // deferred is non-nullable and holds a suspended fiber; leave it uninitialized on
+            // import (SerializableState skips this marker) and __unserialize installs a fresh one.
+            'deferred' => ['__uninitialized' => true],
             'timer' => $this->timer !== null,
         ]);
     }
