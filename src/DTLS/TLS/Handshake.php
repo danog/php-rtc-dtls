@@ -149,9 +149,13 @@ final class Handshake implements EventForwarderHost
     }
 
     /**
-     * Advance one handshake step. Public so unserialize can re-queue it.
+     * Advance one handshake step.
+     *
+     * Only ever reached as the first-class callable `$this->runScheduledAdvance(...)` handed to
+     * EventLoop::queue() — including when __unserialize() re-queues it. That callable captures
+     * this method's private scope, so the event loop can invoke it without it being public.
      */
-    public function runScheduledAdvance(): void
+    private function runScheduledAdvance(): void
     {
             $this->advanceScheduled = false;
             $this->advance();
@@ -258,9 +262,13 @@ final class Handshake implements EventForwarderHost
     }
 
     /**
-     * Retransmit-timer callback. Public so it can be rescheduled after unserialize.
+     * Retransmit-timer callback.
+     *
+     * Armed only as the first-class callable `$this->onDtlsTimeout(...)` passed to
+     * EventLoop::delay() (see handleDTLSTimeout()), including when __unserialize() reschedules
+     * the timer. That callable keeps this method's private scope, so it stays private.
      */
-    public function onDtlsTimeout(): void
+    private function onDtlsTimeout(): void
     {
         $this->timer = null;
         $this->ssl->dtlsV1HandleTimeout();
