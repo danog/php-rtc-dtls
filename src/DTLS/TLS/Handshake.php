@@ -11,7 +11,6 @@
 
 namespace Webrtc\DTLS\DTLS\TLS;
 
-use Exception;
 use Amp\DeferredFuture;
 use Revolt\EventLoop;
 use Throwable;
@@ -205,11 +204,10 @@ final class Handshake implements IceTransportDataListener
     private function sendBIOData(): void
     {
         while (($data = $this->bio->read()) !== null) {
-            try {
-                $this->transport->send($data);
-            } catch (Exception) {
-                // Silently handle transport send errors
-            }
+            // A transport send failure means the flight never reached the peer. Let it propagate:
+            // the callers (advance() and onDtlsTimeout()) fail the handshake with this as the cause,
+            // rather than silently stalling until the retransmission timer gives up on a dead socket.
+            $this->transport->send($data);
         }
     }
 
@@ -272,8 +270,19 @@ final class Handshake implements IceTransportDataListener
     private function onDtlsTimeout(): void
     {
         $this->timer = null;
-        $this->ssl->dtlsV1HandleTimeout();
-        $this->sendBIOData();
+        // This runs as a bare EventLoop timer callback, so a retransmission/send failure here must
+        // be routed into the handshake failure path (as advance() does) rather than escaping
+        // uncaught into the event loop.
+        try {
+            $this->ssl->dtlsV1HandleTimeout();
+            $this->sendBIOData();
+        } catch (Throwable $e) {
+            $this->teardown();
+            if (!$this->deferred->isComplete()) {
+                $this->deferred->error(new HandshakeException("Handshake Failed", (int) $e->getCode(), $e));
+            }
+            return;
+        }
         if (($timeout = $this->ssl->dtlsV1GetTimeout()) !== null) {
             $this->handleDTLSTimeout($timeout);
         }
