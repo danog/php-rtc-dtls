@@ -2,23 +2,29 @@
 
 namespace Tests\Webrtc\DTLS;
 
-use Evenement\EventEmitter;
 use Webrtc\ICE\Enum\IceRole;
 use Webrtc\ICE\Listener\IceTransportDataListener;
 use Webrtc\ICE\Listener\IceTransportDisconnectListener;
+use Webrtc\ICE\Listener\IceTransportStateChangeListener;
 use Webrtc\ICE\RTCIceCandidate;
 use Webrtc\ICE\RTCIceConnectionInterface;
 use Webrtc\ICE\RTCIceGathererInterface;
 use Webrtc\ICE\RTCIceParameters;
 use Webrtc\ICE\RTCIceTransportInterface;
 
-class IceTransportMock extends EventEmitter implements RTCIceTransportInterface
+class IceTransportMock implements RTCIceTransportInterface
 {
     /** @var list<IceTransportDataListener> */
     private array $dataListeners = [];
 
     /** @var list<IceTransportDisconnectListener> */
     private array $disconnectListeners = [];
+
+    /** @var list<IceTransportStateChangeListener> */
+    private array $statechangeListeners = [];
+
+    /** @var (callable(string): void)|null Sink invoked with each datagram the transport sends. */
+    public $onSend = null;
 
     public function __construct(private readonly IceRole $role)
     {
@@ -42,6 +48,11 @@ class IceTransportMock extends EventEmitter implements RTCIceTransportInterface
         $this->disconnectListeners[] = $listener;
     }
 
+    public function addStateChangeListener(IceTransportStateChangeListener $listener): void
+    {
+        $this->statechangeListeners[] = $listener;
+    }
+
     /** Deliver a datagram to the registered data listeners (the DTLS transport and handshake). */
     public function deliver(string $data): void
     {
@@ -52,7 +63,9 @@ class IceTransportMock extends EventEmitter implements RTCIceTransportInterface
 
     public function send(string $bytes): void
     {
-        $this->emit('send', [$bytes]);
+        if ($this->onSend !== null) {
+            ($this->onSend)($bytes);
+        }
     }
 
     public function getRole(): IceRole

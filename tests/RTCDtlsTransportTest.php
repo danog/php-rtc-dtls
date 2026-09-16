@@ -377,16 +377,16 @@ class RTCDtlsTransportTest extends TestCase
     {
         $drops = $this->drops ?? new DropList();
 
-        $server->on('send', function ($data) use ($client, $drops) {
+        $server->onSend = function ($data) use ($client, $drops) {
             if (!$drops->shouldDrop() && !$this->disconnect) {
                 $client->deliver($data);
             }
-        });
-        $client->on('send', function ($data) use ($server, $drops) {
+        };
+        $client->onSend = function ($data) use ($server, $drops) {
             if (!$drops->shouldDrop() && !$this->disconnect) {
                 $server->deliver($data);
             }
-        });
+        };
     }
 
     private function connect(RTCDtlsTransport $server, RTCDtlsTransport $client)

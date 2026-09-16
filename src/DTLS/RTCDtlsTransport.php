@@ -11,11 +11,11 @@
 
 namespace Webrtc\DTLS\DTLS;
 
-use Evenement\EventEmitter;
 use Psr\Log\LoggerInterface;
 use Throwable;
 use Webrtc\DataChannel\RTCSctpTransportInterface;
 use Webrtc\DTLS\DTLS\Enum\SSLHandshakeState;
+use Webrtc\DTLS\Listener\DtlsTransportStateChangeListener;
 use Webrtc\DTLS\DTLS\Exception\DTLSException;
 use Webrtc\DTLS\DTLS\Exception\TLSException;
 use Webrtc\DTLS\DTLS\TLS\TLS;
@@ -23,6 +23,7 @@ use Webrtc\ICE\Enum\IceRole;
 use Webrtc\ICE\Listener\IceTransportDataListener;
 use Webrtc\ICE\Listener\IceTransportDisconnectListener;
 use Webrtc\ICE\RTCIceTransportInterface;
+use Webrtc\Mixin\SerializableState;
 use Webrtc\NTP\NetworkTimeProtocol;
 use Webrtc\RTCP\Exception\RtcpExceptionInterface;
 use Webrtc\RTCP\RtcpPacket;
@@ -70,7 +71,7 @@ use Webrtc\Stats\RTCTransportStats;
  *
  * @package Webrtc\DTLS\DTLS
  */
-final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface, IceTransportDataListener, IceTransportDisconnectListener
+final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface, IceTransportDataListener, IceTransportDisconnectListener
 {
     /** @var TLSState Current state of the DTLS transport */
     private TLSState $state = TLSState::NEW;
@@ -102,6 +103,9 @@ final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransport
     /** @var DtlsRole The role (client/server) in the DTLS handshake */
     private DtlsRole $role = DtlsRole::Auto;
 
+    /** @var \WeakMap<DtlsTransportStateChangeListener, null> Listeners notified when the state changes. */
+    private \WeakMap $statechangeListeners;
+
     /**
      * RTCDtlsTransport constructor.
      *
@@ -111,11 +115,33 @@ final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransport
      */
     public function __construct(private readonly RTCIceTransportInterface $transport, private readonly RTCCertificate $certificate)
     {
+        /** @var \WeakMap<DtlsTransportStateChangeListener, null> */
+        $this->statechangeListeners = new \WeakMap();
         $this->tls = TLS::create($this->certificate);
         $this->reportTransport = new RTCTransportStats("transport_" . spl_object_id($this));
         $this->rtpRouter = new RtpRouter();
         $this->headerExtensionsMap = new HeaderExtensionsMap();
         $transport->addDisconnectListener($this);
+    }
+
+    /**
+     * Register a listener notified when the transport state changes.
+     *
+     * Typed replacement for on('statechange'); the listener is a plain object captured by serialization.
+     */
+    public function addStateChangeListener(DtlsTransportStateChangeListener $listener): void
+    {
+        $this->statechangeListeners[$listener] = null;
+    }
+
+    /**
+     * Notify registered listeners that the transport state changed (was the "statechange" event).
+     */
+    private function notifyStateChange(): void
+    {
+        foreach ($this->statechangeListeners as $listener => $_) {
+            $listener->onDtlsTransportStateChange();
+        }
     }
 
     /**
@@ -491,7 +517,7 @@ final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransport
         if ($state !== $this->state) {
             $this->logger?->debug(sprintf("State changed from %s to %s", $this->state->name, $state->name));
             $this->state = $state;
-            $this->emit("statechange");
+            $this->notifyStateChange();
         }
     }
 
@@ -723,5 +749,33 @@ final class RTCDtlsTransport extends EventEmitter implements RTCRTPDtlsTransport
         }
 
         return $this->role === DtlsRole::Server ? SSLHandshakeState::Accept : SSLHandshakeState::Connect;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function __serialize(): array
+    {
+        $state = SerializableState::export($this, [
+            // WeakMaps cannot be serialized; snapshot their keys and rebuild on the far side.
+            'statechangeListeners' => ['__uninitialized' => true],
+        ]);
+        $state['__statechangeListeners'] = SerializableState::weakMapToList($this->statechangeListeners);
+
+        return $state;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        /** @var list<DtlsTransportStateChangeListener> $statechangeListeners */
+        $statechangeListeners = $data['__statechangeListeners'] ?? [];
+        unset($data['__statechangeListeners']);
+
+        SerializableState::import($this, $data);
+        /** @var \WeakMap<DtlsTransportStateChangeListener, null> */
+        $this->statechangeListeners = SerializableState::listToWeakMap($statechangeListeners);
     }
 }
