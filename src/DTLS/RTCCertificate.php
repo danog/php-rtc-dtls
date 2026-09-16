@@ -14,9 +14,9 @@ namespace Webrtc\DTLS\DTLS;
 use Webrtc\DTLS\DTLS\Exception\RTCCertificateException;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
 use DateTimeImmutable;
-use phpseclib3\Crypt\EC;
-use phpseclib3\Crypt\EC\PrivateKey;
-use phpseclib3\File\X509;
+use phpseclib4\Crypt\EC;
+use phpseclib4\Crypt\EC\PrivateKey;
+use phpseclib4\File\X509;
 use Throwable;
 
 /**
@@ -25,7 +25,7 @@ use Throwable;
  * Represents a certificate used by an RTCDtlsTransport for WebRTC communications.
  * This class handles certificate generation, management, and fingerprinting for DTLS connections.
  *
- * Upstream this was generated through OpenSSL's FFI bindings; it now uses phpseclib3, so that a
+ * Upstream this was generated through OpenSSL's FFI bindings; it now uses phpseclib4, so that a
  * plain PHP installation with no extra extensions can take part in calls. WebRTC certificates are
  * self-signed and pinned by fingerprint, so no chain of trust is involved.
  *
@@ -164,7 +164,7 @@ final class RTCCertificate
             ];
 
             $subject = new X509;
-            /** @var \phpseclib3\Crypt\Common\PublicKey $subjectPublicKey */
+            /** @var \phpseclib4\Crypt\Common\PublicKey $subjectPublicKey */
             $subjectPublicKey = $key->getPublicKey();
             $subject->setPublicKey($subjectPublicKey);
             $subject->setDN($dn);

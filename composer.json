@@ -43,7 +43,7 @@
         "danog/php-rtc-mixin": "^2.0",
         "danog/php-rtc-srtp": "^1.1.7",
         "symfony/polyfill-php84": "*",
-        "phpseclib/phpseclib": "^3.0.57"
+        "phpseclib/phpseclib": "^4.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.5 || ^12.0 || ^13.3.2",

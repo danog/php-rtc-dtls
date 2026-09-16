@@ -12,7 +12,7 @@
 namespace Webrtc\DTLS\DTLS;
 
 use Webrtc\DTLS\Exception\SSLException;
-use phpseclib3\Crypt\AES;
+use phpseclib4\Crypt\AES;
 use Throwable;
 
 /**

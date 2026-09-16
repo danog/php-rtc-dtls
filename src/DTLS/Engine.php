@@ -13,10 +13,10 @@ namespace Webrtc\DTLS\DTLS;
 
 use Webrtc\DTLS\DTLS\RTCCertificate;
 use Webrtc\DTLS\Exception\SSLException;
-use phpseclib3\Crypt\DH;
-use phpseclib3\Crypt\EC;
-use phpseclib3\Crypt\RSA;
-use phpseclib3\File\X509;
+use phpseclib4\Crypt\DH;
+use phpseclib4\Crypt\EC;
+use phpseclib4\Crypt\RSA;
+use phpseclib4\File\X509;
 use Throwable;
 
 /**
