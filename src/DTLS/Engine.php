@@ -557,8 +557,8 @@ final class Engine
     private function onServerHelloDone(): void
     {
         \assert($this->ecdhePrivate !== null);
+        // phpseclib 4 types EC\PrivateKey::getPublicKey() as EC\PublicKey, so no narrowing is needed.
         $publicKey = $this->ecdhePrivate->getPublicKey();
-        \assert($publicKey instanceof EC\PublicKey);
         /** @var string $point */
         $point = $publicKey->getEncodedCoordinates();
 
@@ -721,8 +721,7 @@ final class Engine
             throw new SSLException('The peer signed something before sending its certificate!');
         }
         try {
-            $x509 = new X509;
-            $x509->loadX509($this->peerCertificate);
+            $x509 = X509::load($this->peerCertificate);
             // SignatureAndHashAlgorithm is {hash, signature}: the hash is the high byte.
             $hash = match (($algorithm >> 8) & 0xFF) {
                 2 => 'sha1',
@@ -828,8 +827,8 @@ final class Engine
     private function buildServerKeyExchange(): string
     {
         \assert($this->ecdhePrivate !== null);
+        // phpseclib 4 types EC\PrivateKey::getPublicKey() as EC\PublicKey, so no narrowing is needed.
         $publicKey = $this->ecdhePrivate->getPublicKey();
-        \assert($publicKey instanceof EC\PublicKey);
         /** @var string $point */
         $point = $publicKey->getEncodedCoordinates();
         $params = \chr(3).pack('n', self::CURVE_SECP256R1).\chr(\strlen($point)).$point;

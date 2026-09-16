@@ -104,15 +104,14 @@ final class RTCCertificate
         }
         $this->privateKey = $key;
 
-        $x509 = new X509;
-        /** @var array<array-key, mixed>|false $parsed */
-        $parsed = $x509->loadX509($certificate);
-        if ($parsed === false) {
-            throw new RTCCertificateException('Could not parse the certificate!');
+        try {
+            $x509 = X509::load($certificate);
+        } catch (Throwable $e) {
+            throw new RTCCertificateException('Could not parse the certificate!', 0, $e);
         }
         $this->certificate = $certificate;
         $this->der = self::toDer($certificate);
-        $this->expires = self::parseExpiry($parsed);
+        $this->expires = self::parseExpiry($x509);
     }
 
     /**
@@ -163,30 +162,23 @@ final class RTCCertificate
                 'CN' => self::ORGANIZATION_WEBSITE,
             ];
 
-            $subject = new X509;
             /** @var \phpseclib4\Crypt\Common\PublicKey $subjectPublicKey */
             $subjectPublicKey = $key->getPublicKey();
-            $subject->setPublicKey($subjectPublicKey);
-            $subject->setDN($dn);
-
-            $issuer = new X509;
-            $issuer->setPrivateKey($key);
-            $issuer->setDN($dn);
-
-            $authority = new X509;
+            $certificate = new X509($subjectPublicKey);
+            $certificate->setSubjectDN($dn);
+            // The certificate is self-signed, so the issuer and the subject are identical.
+            $certificate->setIssuerDN($dn);
             // The validity starts in the past to tolerate clock skew between the two peers.
-            $authority->setStartDate('-1 day');
-            $authority->setEndDate(self::VALIDITY);
-            $authority->setSerialNumber((string) random_int(1, PHP_INT_MAX), 10);
+            $certificate->setStartDate('-1 day');
+            $certificate->setEndDate(self::VALIDITY);
+            $certificate->setSerialNumber((string) random_int(1, PHP_INT_MAX), 10);
 
-            /** @var array<array-key, mixed>|false $signed */
-            $signed = $authority->sign($issuer, $subject);
-            if ($signed === false) {
-                throw new RTCCertificateException('Could not sign the generated certificate!');
-            }
-            $this->certificate = $authority->saveX509($signed);
+            // phpseclib 4 inverts signing: the private key signs the certificate in place.
+            $key->sign($certificate);
+
+            $this->certificate = $certificate->toString();
             $this->der = self::toDer($this->certificate);
-            $this->expires = self::parseExpiry($signed);
+            $this->expires = self::parseExpiry($certificate);
         } catch (RTCCertificateException $e) {
             throw $e;
         } catch (Throwable $e) {
@@ -209,21 +201,26 @@ final class RTCCertificate
 
     /**
      * Read the notAfter date out of a parsed certificate.
+     *
+     * phpseclib 4 decodes the validity times into ASN.1 time objects that extend {@see \DateTime}
+     * (UTCTime / GeneralizedTime), so the notAfter can be converted straight to a DateTimeImmutable.
      */
-    private static function parseExpiry(array $certificate): DateTimeImmutable
+    private static function parseExpiry(X509 $certificate): DateTimeImmutable
     {
-        /** @var array<string, mixed> $tbs */
-        $tbs = $certificate['tbsCertificate'] ?? [];
-        /** @var array<string, mixed> $validity */
-        $validity = $tbs['validity'] ?? [];
-        /** @var array{utcTime?: string, generalTime?: string} $notAfter */
-        $notAfter = $validity['notAfter'] ?? [];
-        $date = $notAfter['utcTime'] ?? $notAfter['generalTime'] ?? null;
         try {
-            return $date !== null ? new DateTimeImmutable($date) : new DateTimeImmutable(self::VALIDITY);
+            /** @var array<string, mixed> $tbs */
+            $tbs = $certificate->toArray()['tbsCertificate'] ?? [];
+            /** @var array<string, mixed> $validity */
+            $validity = $tbs['validity'] ?? [];
+            /** @var array{utcTime?: \DateTimeInterface, generalTime?: \DateTimeInterface} $notAfter */
+            $notAfter = $validity['notAfter'] ?? [];
+            $date = $notAfter['generalTime'] ?? $notAfter['utcTime'] ?? null;
+            if ($date instanceof \DateTimeInterface) {
+                return DateTimeImmutable::createFromInterface($date);
+            }
         } catch (Throwable) {
-            return new DateTimeImmutable(self::VALIDITY);
         }
+        return new DateTimeImmutable(self::VALIDITY);
     }
 
     /**
