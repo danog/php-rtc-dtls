@@ -590,8 +590,6 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtl
             if ($this->inboundSrtp === null) {
                 throw new DTLSException("Unable to process incoming SRTP: inbound SRTP session is not initialized.");
             }
-            $GLOBALS['__srtp_in'] = ($GLOBALS['__srtp_in'] ?? 0) + 1; // SRTPDEBUG
-            if (($GLOBALS['__srtp_in'] % 200) === 1) { \danog\MadelineProto\Logger::log('SRTPDEBUG inbound srtp pkt#'.$GLOBALS['__srtp_in'].' isRtcp='.(RtpUtility::isRtcp($data)?'1':'0'), \danog\MadelineProto\Logger::ERROR); }
             if (RtpUtility::isRtcp($data)) {
                 $decryptedRtcp = $this->inboundSrtp->unprotectRtcp($data);
                 $this->handleRtcpData($decryptedRtcp);
@@ -600,8 +598,6 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtl
                 $this->handleRtpData($decryptedRtp, $arrivalTimeMs);
             }
         } catch (SrtpExceptionInterface $e) {
-            $GLOBALS['__srtp_fail'] = ($GLOBALS['__srtp_fail'] ?? 0) + 1; // SRTPDEBUG
-            if (($GLOBALS['__srtp_fail'] % 100) === 1) { \danog\MadelineProto\Logger::log('SRTPDEBUG decrypt FAIL#'.$GLOBALS['__srtp_fail'].': '.$e->getMessage(), \danog\MadelineProto\Logger::ERROR); }
             $this->logger?->debug(sprintf("DTLS: SRTP decryption failed: %s", $e->getMessage()));
         }
     }
@@ -640,31 +636,15 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtl
      */
     public function handleRtpData(string $data, int $arrivalTimeMs): void
     {
-        // PTDEBUG: raw RTP payload type straight from the header (byte 1 & 0x7F), before decode, so we
-        // see what the peer actually sends even if RtpPacket::decode() then rejects it.
-        $rawPt = strlen($data) > 1 ? (ord($data[1]) & 0x7F) : -1;
-        $GLOBALS['__rawpt'][$rawPt] = ($GLOBALS['__rawpt'][$rawPt] ?? 0) + 1;
-        if ($GLOBALS['__rawpt'][$rawPt] === 1) { \danog\MadelineProto\Logger::log('PTDEBUG raw RTP pt='.$rawPt.' len='.strlen($data).' rawPTs=['.implode(',', array_keys($GLOBALS['__rawpt'])).']', \danog\MadelineProto\Logger::ERROR); }
         try {
             $packet = RtpPacket::decode($data, $this->headerExtensionsMap);
         } catch (RtpExceptionInterface $e) {
-            $GLOBALS['__decfail'][$rawPt] = ($GLOBALS['__decfail'][$rawPt] ?? 0) + 1; // PTDEBUG
-            if ($GLOBALS['__decfail'][$rawPt] === 1) { \danog\MadelineProto\Logger::log('PTDEBUG decode-FAIL rawPt='.$rawPt.': '.$e->getMessage(), \danog\MadelineProto\Logger::ERROR); }
             $this->logger?->debug(sprintf("DTLS: RTP parsing failed: %s", $e->getMessage()));
             return;
         }
 
-        // PTDEBUG: tally incoming RTP by payload type and whether it routes
-        $pt = $packet->getPayloadType();
-        $GLOBALS['__pt_seen'][$pt] = ($GLOBALS['__pt_seen'][$pt] ?? 0) + 1;
         // Route RTP packet
         $receiver = $this->rtpRouter->routeRtp($packet);
-        // PTDEBUG: log each DISTINCT ssrc:pt (so simulcast layers all show), not just first-per-pt.
-        $key = $packet->getSsrc().':'.$pt;
-        if (!isset($GLOBALS['__ssrcpt'][$key])) {
-            $GLOBALS['__ssrcpt'][$key] = true;
-            \danog\MadelineProto\Logger::log('PTDEBUG stream ssrc='.$packet->getSsrc().' pt='.$pt.' routed='.($receiver !== null ? '1' : '0').' distinctStreams='.count($GLOBALS['__ssrcpt']), \danog\MadelineProto\Logger::ERROR);
-        }
         $receiver?->handleRtpPacket($packet, $arrivalTimeMs);
     }
 
