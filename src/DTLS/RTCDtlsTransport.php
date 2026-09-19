@@ -734,6 +734,11 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtl
 #[\Override]
     public function removeRtpSender(RtpSenderInterface $sender): void
     {
+        // A transport that never finished constructing (e.g. one restored from a half-built, killed
+        // session) has no router yet; tearing its senders down during destruction must not crash.
+        if (!isset($this->rtpRouter)) {
+            return;
+        }
         $this->rtpRouter->removeSender($sender);
     }
 
