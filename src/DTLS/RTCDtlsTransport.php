@@ -501,10 +501,14 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtl
         }
         $srtpKeyMaterial = $this->tls->exportKeyingMaterial($selectedProfile["keyLength"], $selectedProfile["saltLent"]);
 
-        $isServer = $this->transport->getRole() === IceRole::Controlling;
+        // RFC 5764 section 4.2: the keying material is client_write_key | server_write_key | client_write_salt |
+        // server_write_salt, where "client" and "server" are the DTLS handshake roles (which are
+        // independent of the ICE role). The client protects what it sends with the client key, so we
+        // decrypt what the peer sends with THEIR key and encrypt what we send with OURS.
+        $isServer = $this->getHandShakeState() === SSLHandshakeState::Accept;
 
-        $this->inboundSrtp = $srtp->getInbound($srtpKeyMaterial, intval($isServer));
-        $this->outboundSrtp = $srtp->getOutbound($srtpKeyMaterial, intval(!$isServer));
+        $this->inboundSrtp = $srtp->getInbound($srtpKeyMaterial, intval(!$isServer));
+        $this->outboundSrtp = $srtp->getOutbound($srtpKeyMaterial, intval($isServer));
     }
 
     /**
