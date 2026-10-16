@@ -361,6 +361,19 @@ class RTCDtlsTransportTest extends TestCase
         $this->assertEquals($statsClient->bytesSent, $statsServer->bytesReceived);
     }
 
+    public function testEachTransportNumbersItsPackets(): void
+    {
+        [$client, $server] = $this->createDtlsTransport();
+
+        $this->assertSame([1, 2, 3], [$client->nextTransportSequenceNumber(), $client->nextTransportSequenceNumber(), $client->nextTransportSequenceNumber()]);
+        $this->assertSame(1, $server->nextTransportSequenceNumber());
+        for ($i = 4; $i <= 0xFFFF; $i++) {
+            $client->nextTransportSequenceNumber();
+        }
+        // 16 bits.
+        $this->assertSame(0, $client->nextTransportSequenceNumber());
+    }
+
     /**
      * @return array{RTCDtlsTransport, RTCDtlsTransport}
      * @throws OpenSSLException

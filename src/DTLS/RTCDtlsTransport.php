@@ -34,6 +34,7 @@ use Webrtc\RTP\RTCRTPDtlsTransportInterface;
 use Webrtc\RTP\RtpPacket;
 use Webrtc\RTP\RtpRouter;
 use Webrtc\RTP\RtpUtility;
+use Webrtc\RTP\TransportSequenceNumbers;
 use Webrtc\RTP\Sender\RTCRtpSender;
 use Webrtc\RTP\Sender\RtpSenderInterface;
 use Webrtc\RTPParameter\RTCRtpReceiveParameters;
@@ -71,7 +72,7 @@ use Webrtc\Stats\RTCTransportStats;
  *
  * @package Webrtc\DTLS\DTLS
  */
-final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtlsTransportInterface, IceTransportDataListener, IceTransportDisconnectListener
+final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, TransportSequenceNumbers, RTCSctpDtlsTransportInterface, IceTransportDataListener, IceTransportDisconnectListener
 {
     /** @var TLSState Current state of the DTLS transport */
     private TLSState $state = TLSState::NEW;
@@ -105,6 +106,9 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtl
 
     /** @var \WeakMap<DtlsTransportStateChangeListener, null> Listeners notified when the state changes. */
     private \WeakMap $statechangeListeners;
+
+    /** @var int The transport-wide sequence number of the last RTP packet sent, see {@see self::nextTransportSequenceNumber()}. */
+    private int $transportSequenceNumber = 0;
 
     /**
      * RTCDtlsTransport constructor.
@@ -650,6 +654,17 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, RTCSctpDtl
         // Route RTP packet
         $receiver = $this->rtpRouter->routeRtp($packet);
         $receiver?->handleRtpPacket($packet, $arrivalTimeMs);
+    }
+
+    /**
+     * The transport-wide sequence number of the next RTP packet, shared by all of the senders of the transport.
+     *
+     * @return int A 16-bit number.
+     */
+    #[\Override]
+    public function nextTransportSequenceNumber(): int
+    {
+        return $this->transportSequenceNumber = ($this->transportSequenceNumber + 1) & 0xFFFF;
     }
 
     /**
