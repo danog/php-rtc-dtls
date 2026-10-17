@@ -28,6 +28,17 @@ class RTCCertificateTest extends TestCase
         $this->assertEquals(95, strlen($fingerprints[0]->value));
     }
 
+    public function testSerialize()
+    {
+        // Calls are persisted along with the session, so their certificate must survive serialization.
+        $certificate = new RTCCertificate();
+        $unserialized = unserialize(serialize($certificate));
+
+        $this->assertEquals($certificate->getFingerprints(), $unserialized->getFingerprints());
+        $this->assertEquals($certificate->expires(), $unserialized->expires());
+        $this->assertSame($certificate->getKey()->getPoint(), $unserialized->getKey()->getPoint());
+    }
+
     public function testLoadCertificate()
     {
         $privateKey = __DIR__ . '/fixture/private_key.pem';

@@ -56,6 +56,17 @@ class CryptoTest extends TestCase
     }
 
     #[DataProvider('backendPairs')]
+    public function testAKeySerializedWithOneBackendUnserializesWithTheOther(string $a, string $b): void
+    {
+        $key = self::with($a, static fn () => EcPrivateKey::generateP256());
+        $serialized = serialize($key);
+        $unserialized = self::with($b, static fn () => unserialize($serialized));
+        $this->assertInstanceOf(EcPrivateKey::class, $unserialized);
+        $this->assertSame($key->getPoint(), $unserialized->getPoint());
+        $this->assertSame($b === Crypto::BACKEND_OPENSSL, $unserialized->getOpenssl() !== null);
+    }
+
+    #[DataProvider('backendPairs')]
     public function testTheBackendsAgreeOnEcdh(string $a, string $b): void
     {
         $ours = self::with($a, EcPrivateKey::generateP256(...));

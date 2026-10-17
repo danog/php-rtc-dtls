@@ -162,4 +162,23 @@ final class EcPrivateKey
     {
         return $this->key instanceof OpenSSLAsymmetricKey ? $this->key : null;
     }
+
+    /**
+     * OpenSSL keys can't be serialized: the key is serialized in PEM form, and loaded back with whichever
+     * backend is available then.
+     *
+     * @return array{pem: string}
+     */
+    public function __serialize(): array
+    {
+        return ['pem' => $this->toPem()];
+    }
+
+    /**
+     * @param array{pem: string} $data
+     */
+    public function __unserialize(array $data): void
+    {
+        $this->key = self::load($data['pem'])->key;
+    }
 }
