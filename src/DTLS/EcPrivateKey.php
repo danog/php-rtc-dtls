@@ -175,10 +175,23 @@ final class EcPrivateKey
     }
 
     /**
-     * @param array{pem: string} $data
+     * @param array<string, mixed> $data The PEM, or the phpseclib key itself, as serialized before 2.0.19 (only
+     *     with phpseclib: OpenSSL keys couldn't be serialized)
+     *
+     * @throws SSLException If it isn't a serialized key.
      */
     public function __unserialize(array $data): void
     {
-        $this->key = self::load($data['pem'])->key;
+        if (isset($data['pem']) && \is_string($data['pem'])) {
+            $this->key = self::load($data['pem'])->key;
+            return;
+        }
+        $key = $data["\0".self::class."\0key"] ?? null;
+        if (!$key instanceof EC\PrivateKey) {
+            throw new SSLException('Invalid serialized EC private key!');
+        }
+        // An unserialized key skips the initialization of the key formats of phpseclib, needed to export it.
+        EC::getSupportedKeyFormats();
+        $this->key = self::load($key->toString('PKCS8'))->key;
     }
 }
