@@ -13,10 +13,6 @@ namespace Webrtc\DTLS\DTLS;
 
 use Webrtc\DTLS\DTLS\RTCCertificate;
 use Webrtc\DTLS\Exception\SSLException;
-use phpseclib4\Crypt\DH;
-use phpseclib4\Crypt\EC;
-use phpseclib4\Crypt\RSA;
-use phpseclib4\File\X509;
 use Throwable;
 
 /**
@@ -49,9 +45,6 @@ final class Engine
     private const EXT_EXTENDED_MASTER_SECRET = 23;
     private const EXT_RENEGOTIATION_INFO = 0xFF01;
 
-    /** DER prefix of a SubjectPublicKeyInfo holding an uncompressed P-256 point. */
-    private const P256_SPKI_PREFIX = "3059301306072a8648ce3d020106082a8648ce3d030107034200";
-
     private const AES_KEY_LENGTH = 16;
     private const AEAD_SALT_LENGTH = 4;
 
@@ -81,7 +74,7 @@ final class Engine
     private string $cookie = '';
     private int $cipherSuite = self::SUITE_ECDHE_ECDSA_AES128_GCM;
 
-    private ?EC\PrivateKey $ecdhePrivate = null;
+    private ?EcPrivateKey $ecdhePrivate = null;
     private string $masterSecret = '';
     /** The peer's ECDHE public point, kept until we are ready to derive the master secret. */
     private string $peerEcdhePoint = '';
@@ -451,7 +444,7 @@ final class Engine
         $this->extendedMasterSecret = $this->peerOfferedExtendedMasterSecret;
 
         $this->serverRandom = self::random32();
-        $this->ecdhePrivate = EC::createKey('secp256r1');
+        $this->ecdhePrivate = EcPrivateKey::generateP256();
 
         // The transcript restarts from this ClientHello; anything before it was a cookie exchange.
         $this->sendFlight([
@@ -550,17 +543,14 @@ final class Engine
             $signatureAlgorithm
         );
 
-        $this->ecdhePrivate = EC::createKey('secp256r1');
+        $this->ecdhePrivate = EcPrivateKey::generateP256();
         $this->peerEcdhePoint = $point;
     }
 
     private function onServerHelloDone(): void
     {
         \assert($this->ecdhePrivate !== null);
-        // phpseclib 4 types EC\PrivateKey::getPublicKey() as EC\PublicKey, so no narrowing is needed.
-        $publicKey = $this->ecdhePrivate->getPublicKey();
-        /** @var string $point */
-        $point = $publicKey->getEncodedCoordinates();
+        $point = $this->ecdhePrivate->getPoint();
 
         $messages = [
             [Handshake::CERTIFICATE, $this->buildCertificate()],
@@ -687,10 +677,7 @@ final class Engine
     private function deriveMasterSecret(string $peerPoint, string $sessionTranscript): string
     {
         \assert($this->ecdhePrivate !== null);
-        $peerKey = EC::loadPublicKey((string) hex2bin(self::P256_SPKI_PREFIX).$peerPoint);
-        \assert($peerKey instanceof EC\PublicKey);
-        /** @var string $preMasterSecret */
-        $preMasterSecret = DH::computeSecret($this->ecdhePrivate, $peerKey->getEncodedCoordinates());
+        $preMasterSecret = $this->ecdhePrivate->computeSharedSecret($peerPoint);
 
         $masterSecret = $this->extendedMasterSecret
             ? Prf::extendedMasterSecret($preMasterSecret, hash('sha256', $sessionTranscript, true))
@@ -720,32 +707,17 @@ final class Engine
         if ($this->peerCertificate === null) {
             throw new SSLException('The peer signed something before sending its certificate!');
         }
+        // SignatureAndHashAlgorithm is {hash, signature}: the hash is the high byte.
+        $hash = match (($algorithm >> 8) & 0xFF) {
+            2 => 'sha1',
+            3 => 'sha224',
+            4 => 'sha256',
+            5 => 'sha384',
+            6 => 'sha512',
+            default => 'sha256',
+        };
         try {
-            $x509 = X509::load($this->peerCertificate);
-            // SignatureAndHashAlgorithm is {hash, signature}: the hash is the high byte.
-            $hash = match (($algorithm >> 8) & 0xFF) {
-                2 => 'sha1',
-                3 => 'sha224',
-                4 => 'sha256',
-                5 => 'sha384',
-                6 => 'sha512',
-                default => 'sha256',
-            };
-            /** @var EC\PublicKey|RSA\PublicKey $publicKey */
-            $publicKey = $x509->getPublicKey();
-            /** @var EC\PublicKey|RSA\PublicKey $publicKey */
-            $publicKey = $publicKey->withHash($hash);
-            if ($publicKey instanceof RSA\PublicKey) {
-                // TLS 1.2 rsa_pkcs1_* signatures use PKCS#1 v1.5, while phpseclib defaults to PSS.
-                /** @var RSA\PublicKey $publicKey */
-                $publicKey = $publicKey->withPadding(RSA::SIGNATURE_PKCS1);
-            }
-            if ($publicKey instanceof EC\PublicKey) {
-                /** @var EC\PublicKey $publicKey */
-                $publicKey = $publicKey->withSignatureFormat('ASN1');
-            }
-            /** @var bool $valid */
-            $valid = $publicKey->verify($data, $signature);
+            $valid = Crypto::verify($this->peerCertificate, $data, $signature, $hash);
         } catch (Throwable $e) {
             throw new SSLException('Could not verify the peer signature: '.$e->getMessage(), 0, $e);
         }
@@ -827,19 +799,10 @@ final class Engine
     private function buildServerKeyExchange(): string
     {
         \assert($this->ecdhePrivate !== null);
-        // phpseclib 4 types EC\PrivateKey::getPublicKey() as EC\PublicKey, so no narrowing is needed.
-        $publicKey = $this->ecdhePrivate->getPublicKey();
-        /** @var string $point */
-        $point = $publicKey->getEncodedCoordinates();
+        $point = $this->ecdhePrivate->getPoint();
         $params = \chr(3).pack('n', self::CURVE_SECP256R1).\chr(\strlen($point)).$point;
 
-        $signingKey = $this->certificate->getPrivateKey();
-        /** @var EC\PrivateKey $signingKey */
-        $signingKey = $signingKey->withSignatureFormat('ASN1');
-        /** @var EC\PrivateKey $signingKey */
-        $signingKey = $signingKey->withHash('sha256');
-        /** @var string $signature */
-        $signature = $signingKey->sign($this->clientRandom.$this->serverRandom.$params);
+        $signature = $this->certificate->getKey()->sign($this->clientRandom.$this->serverRandom.$params);
 
         return $params.pack('n', self::SIG_ECDSA_SECP256R1_SHA256)
             .pack('n', \strlen($signature)).$signature;
@@ -856,13 +819,7 @@ final class Engine
 
     private function buildCertificateVerify(string $transcript): string
     {
-        $signingKey = $this->certificate->getPrivateKey();
-        /** @var EC\PrivateKey $signingKey */
-        $signingKey = $signingKey->withSignatureFormat('ASN1');
-        /** @var EC\PrivateKey $signingKey */
-        $signingKey = $signingKey->withHash('sha256');
-        /** @var string $signature */
-        $signature = $signingKey->sign($transcript);
+        $signature = $this->certificate->getKey()->sign($transcript);
 
         return pack('n', self::SIG_ECDSA_SECP256R1_SHA256).pack('n', \strlen($signature)).$signature;
     }

@@ -62,3 +62,9 @@ jobs:
             vendor/bin/phpunit -c phpunit-skiptolerant.xml
           fi
         shell: bash
+
+      - name: Run PHPUnit tests with the phpseclib fallback
+        if: runner.os == 'Linux'
+        run: vendor/bin/phpunit
+        env:
+          PHP_RTC_CRYPTO_BACKEND: phpseclib

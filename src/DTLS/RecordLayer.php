@@ -12,7 +12,7 @@
 namespace Webrtc\DTLS\DTLS;
 
 use Webrtc\DTLS\Exception\SSLException;
-use phpseclib4\Crypt\AES;
+use Webrtc\Srtp\Aes;
 use Throwable;
 
 /**
@@ -146,11 +146,7 @@ final class RecordLayer
         // sequence number, not from the explicit nonce carried in the payload.
         $aad = self::sequence($epoch, $sequence).\chr($type).$version.pack('n', \strlen($payload));
 
-        $aes = new AES('gcm');
-        $aes->setKey($this->writeKey);
-        $aes->setNonce($nonce);
-        $aes->setAAD($aad);
-        $ciphertext = $aes->encrypt($payload).$aes->getTag();
+        $ciphertext = Aes::gcmEncrypt($this->writeKey, $nonce, $aad, $payload);
 
         $body = $explicit.$ciphertext;
         return \chr($type).$version.self::sequence($epoch, $sequence)
@@ -216,15 +212,13 @@ final class RecordLayer
 
             $aad = self::sequence($epoch, $sequence).\chr($type).$version.pack('n', \strlen($ciphertext));
 
+            \assert($this->readSalt !== null);
             try {
-                $aes = new AES('gcm');
-                $aes->setKey($this->readKey);
-                \assert($this->readSalt !== null);
-                $aes->setNonce($this->readSalt.$explicit);
-                $aes->setAAD($aad);
-                $aes->setTag($tag);
-                $plaintext = $aes->decrypt($ciphertext);
+                $plaintext = Aes::gcmDecrypt($this->readKey, $this->readSalt.$explicit, $aad, $ciphertext, $tag);
             } catch (Throwable) {
+                $plaintext = false;
+            }
+            if ($plaintext === false) {
                 // A forged or corrupted record; silently discard it.
                 continue;
             }

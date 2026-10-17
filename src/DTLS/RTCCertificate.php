@@ -14,9 +14,7 @@ namespace Webrtc\DTLS\DTLS;
 use Webrtc\DTLS\DTLS\Exception\RTCCertificateException;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
 use DateTimeImmutable;
-use phpseclib4\Crypt\EC;
 use phpseclib4\Crypt\EC\PrivateKey;
-use phpseclib4\File\X509;
 use Throwable;
 
 /**
@@ -25,9 +23,9 @@ use Throwable;
  * Represents a certificate used by an RTCDtlsTransport for WebRTC communications.
  * This class handles certificate generation, management, and fingerprinting for DTLS connections.
  *
- * Upstream this was generated through OpenSSL's FFI bindings; it now uses phpseclib4, so that a
- * plain PHP installation with no extra extensions can take part in calls. WebRTC certificates are
- * self-signed and pinned by fingerprint, so no chain of trust is involved.
+ * Upstream this was generated through OpenSSL's FFI bindings; it now uses the openssl extension, or
+ * phpseclib4 without it, so that a plain PHP installation with no extra extensions can take part in
+ * calls. WebRTC certificates are self-signed and pinned by fingerprint, so no chain of trust is involved.
  *
  * The certificate can be either:
  * - Generated automatically with an EC secp256r1 private key (default behavior)
@@ -52,10 +50,10 @@ final class RTCCertificate
     /** @var string Default common name for a certificate subject */
     private const ORGANIZATION_WEBSITE = "webrtc.php";
 
-    /** How long the generated certificate stays valid. */
-    private const VALIDITY = '+30 days';
+    /** How many days the generated certificate stays valid. */
+    private const VALIDITY_DAYS = 30;
 
-    private PrivateKey $privateKey;
+    private EcPrivateKey $privateKey;
 
     /** The certificate in PEM form. */
     private string $certificate;
@@ -95,23 +93,17 @@ final class RTCCertificate
     private function load(string $privateKey, string $certificate): void
     {
         try {
-            $key = EC::loadPrivateKey($privateKey);
+            $this->privateKey = EcPrivateKey::load($privateKey);
         } catch (Throwable $e) {
             throw new RTCCertificateException('Could not load the private key: '.$e->getMessage(), 0, $e);
         }
-        if (!$key instanceof PrivateKey) {
-            throw new RTCCertificateException('The provided key is not an EC private key!');
-        }
-        $this->privateKey = $key;
-
         try {
-            $x509 = X509::load($certificate);
+            $this->expires = Crypto::getExpiry($certificate);
         } catch (Throwable $e) {
             throw new RTCCertificateException('Could not parse the certificate!', 0, $e);
         }
         $this->certificate = $certificate;
         $this->der = self::toDer($certificate);
-        $this->expires = self::parseExpiry($x509);
     }
 
     /**
@@ -151,34 +143,16 @@ final class RTCCertificate
     private function generate(): void
     {
         try {
-            $key = EC::createKey('secp256r1');
-            $this->privateKey = $key;
-
-            $dn = [
+            $this->privateKey = EcPrivateKey::generateP256();
+            $this->certificate = Crypto::selfSign($this->privateKey, [
                 'C' => self::COUNTRY,
                 'ST' => self::STATE,
                 'L' => self::CITY,
                 'O' => self::ORGANIZATION,
                 'CN' => self::ORGANIZATION_WEBSITE,
-            ];
-
-            /** @var \phpseclib4\Crypt\Common\PublicKey $subjectPublicKey */
-            $subjectPublicKey = $key->getPublicKey();
-            $certificate = new X509($subjectPublicKey);
-            $certificate->setSubjectDN($dn);
-            // The certificate is self-signed, so the issuer and the subject are identical.
-            $certificate->setIssuerDN($dn);
-            // The validity starts in the past to tolerate clock skew between the two peers.
-            $certificate->setStartDate('-1 day');
-            $certificate->setEndDate(self::VALIDITY);
-            $certificate->setSerialNumber((string) random_int(1, PHP_INT_MAX), 10);
-
-            // phpseclib 4 inverts signing: the private key signs the certificate in place.
-            $key->sign($certificate);
-
-            $this->certificate = $certificate->toString();
+            ], self::VALIDITY_DAYS);
             $this->der = self::toDer($this->certificate);
-            $this->expires = self::parseExpiry($certificate);
+            $this->expires = Crypto::getExpiry($this->certificate);
         } catch (RTCCertificateException $e) {
             throw $e;
         } catch (Throwable $e) {
@@ -200,30 +174,6 @@ final class RTCCertificate
     }
 
     /**
-     * Read the notAfter date out of a parsed certificate.
-     *
-     * phpseclib 4 decodes the validity times into ASN.1 time objects that extend {@see \DateTime}
-     * (UTCTime / GeneralizedTime), so the notAfter can be converted straight to a DateTimeImmutable.
-     */
-    private static function parseExpiry(X509 $certificate): DateTimeImmutable
-    {
-        try {
-            /** @var array<string, mixed> $tbs */
-            $tbs = $certificate->toArray()['tbsCertificate'] ?? [];
-            /** @var array<string, mixed> $validity */
-            $validity = $tbs['validity'] ?? [];
-            /** @var array{utcTime?: \DateTimeInterface, generalTime?: \DateTimeInterface} $notAfter */
-            $notAfter = $validity['notAfter'] ?? [];
-            $date = $notAfter['generalTime'] ?? $notAfter['utcTime'] ?? null;
-            if ($date instanceof \DateTimeInterface) {
-                return DateTimeImmutable::createFromInterface($date);
-            }
-        } catch (Throwable) {
-        }
-        return new DateTimeImmutable(self::VALIDITY);
-    }
-
-    /**
      * Gets the certificate, in PEM form.
      */
     public function getCertificate(): string
@@ -240,9 +190,19 @@ final class RTCCertificate
     }
 
     /**
-     * Gets the private key.
+     * Gets the private key, as a phpseclib key.
      */
     public function getPrivateKey(): PrivateKey
+    {
+        return $this->privateKey->toPhpseclib();
+    }
+
+    /**
+     * Gets the private key.
+     *
+     * @internal
+     */
+    public function getKey(): EcPrivateKey
     {
         return $this->privateKey;
     }

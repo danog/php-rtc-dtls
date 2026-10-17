@@ -23,3 +23,9 @@ require __DIR__ . '/../vendor/autoload.php';
 // at load time.
 BypassFinals::setWhitelist([realpath(__DIR__ . '/../src') . '/*']);
 BypassFinals::enable();
+
+// PHP_RTC_CRYPTO_BACKEND=phpseclib runs the suite with the fallback used without the openssl extension.
+if (getenv('PHP_RTC_CRYPTO_BACKEND') === 'phpseclib') {
+    \Webrtc\DTLS\DTLS\Crypto::$backend = \Webrtc\DTLS\DTLS\Crypto::BACKEND_PHPSECLIB;
+    \Webrtc\Srtp\Aes::$backend = \Webrtc\Srtp\Aes::BACKEND_PHPSECLIB;
+}
