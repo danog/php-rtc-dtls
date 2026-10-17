@@ -121,7 +121,7 @@ final class EcPrivateKey
             return $this->key->withSignatureFormat('ASN1')->withHash('sha256')->sign($data);
         }
         if (!openssl_sign($data, $signature, $this->key, OPENSSL_ALGO_SHA256)) {
-            throw new SSLException('Could not sign: '.(openssl_error_string() ?: 'unknown error'));
+            throw new SSLException('Could not sign: '.Crypto::opensslError());
         }
         /** @var string $signature */
         return $signature;
@@ -136,7 +136,7 @@ final class EcPrivateKey
             return $this->key->toString('PKCS8');
         }
         if (!openssl_pkey_export($this->key, $pem)) {
-            throw new SSLException('Could not export the private key: '.(openssl_error_string() ?: 'unknown error'));
+            throw new SSLException('Could not export the private key: '.Crypto::opensslError());
         }
         /** @var string $pem */
         return $pem;

@@ -44,6 +44,15 @@ final class Crypto
     }
 
     /**
+     * The last OpenSSL error.
+     */
+    public static function opensslError(): string
+    {
+        $error = openssl_error_string();
+        return $error === false ? 'unknown error' : $error;
+    }
+
+    /**
      * Wrap DER data in PEM armour.
      */
     public static function pem(string $label, string $der): string
@@ -63,7 +72,7 @@ final class Crypto
         if (self::useOpenssl()) {
             $publicKey = openssl_pkey_get_public(self::pem('CERTIFICATE', $certificate));
             if ($publicKey === false) {
-                throw new SSLException('Could not load the peer certificate: '.(openssl_error_string() ?: 'unknown error'));
+                throw new SSLException('Could not load the peer certificate: '.self::opensslError());
             }
             $result = openssl_verify($data, $signature, $publicKey, match ($hash) {
                 'sha1' => OPENSSL_ALGO_SHA1,
@@ -73,7 +82,7 @@ final class Crypto
                 'sha512' => OPENSSL_ALGO_SHA512,
             });
             if ($result === -1 || $result === false) {
-                throw new SSLException('Could not verify the signature: '.(openssl_error_string() ?: 'unknown error'));
+                throw new SSLException('Could not verify the signature: '.self::opensslError());
             }
             return $result === 1;
         }
