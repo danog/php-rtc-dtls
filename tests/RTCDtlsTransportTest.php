@@ -16,6 +16,7 @@ use Webrtc\ICE\Enum\IceRole;
 use Webrtc\RTPParameter\RTCRtpCodecParameters;
 use Webrtc\RTPParameter\RTCRtpDecodingParameters;
 use Webrtc\RTPParameter\RTCRtpReceiveParameters;
+use Webrtc\RTPParameter\RTCRtpRtxParameters;
 use Webrtc\SDP\DtlsParameter\RTCDtlsFingerprint;
 use Webrtc\DTLS\Exception\OpenSSLException;
 use Webrtc\Stats\enum\TLSState;
@@ -134,6 +135,23 @@ class RTCDtlsTransportTest extends TestCase
         // FIXME
 //        $this->expectException(DTLSException::class);
 //        $server->sendRtp($rtpPacket);
+    }
+
+    /** The retransmissions of an encoding come on its RTX SSRC: it's routed to the encoding's receiver too. */
+    public function testRtxSsrcIsRoutedToItsReceiver(): void
+    {
+        [$transport] = $this->createDtlsTransport();
+        $receiver = new RtpReceiver();
+        $transport->setRtpReceiver($receiver, new RTCRtpReceiveParameters(
+            codecs: [
+                new RTCRtpCodecParameters('video/VP9', 90000, payloadType: 102),
+                new RTCRtpCodecParameters('video/rtx', 90000, payloadType: 103, parameters: ['apt' => '102']),
+            ],
+            encodings: [new RTCRtpDecodingParameters(1234, 102, new RTCRtpRtxParameters(5678))],
+        ));
+        $table = (fn () => $this->rtpRouter->getSsrcTable())->call($transport);
+        $this->assertSame($receiver, $table[1234] ?? null);
+        $this->assertSame($receiver, $table[5678] ?? null);
     }
 
     public function testRtpMalformed()

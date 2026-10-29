@@ -694,6 +694,11 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, TransportS
         $ssrcs = [];
         foreach ($parameters->encodings as $encoding) {
             $ssrcs[] = $encoding->ssrc;
+            // The retransmissions of the encoding come on their own SSRC: without it, they are routed only by
+            // payload type, which fails as soon as another receiver has the same RTX payload type.
+            if ($encoding->rtx !== null) {
+                $ssrcs[] = $encoding->rtx->ssrc;
+            }
         }
 
         $this->headerExtensionsMap->configure($parameters);
