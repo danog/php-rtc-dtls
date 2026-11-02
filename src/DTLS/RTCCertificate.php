@@ -90,7 +90,7 @@ final class RTCCertificate
     /**
      * @throws RTCCertificateException If the key or certificate cannot be parsed.
      */
-    private function load(string $privateKey, string $certificate): void
+    private function load(#[\SensitiveParameter] string $privateKey, string $certificate): void
     {
         try {
             $this->privateKey = EcPrivateKey::load($privateKey);
@@ -132,7 +132,7 @@ final class RTCCertificate
      */
     public static function fingerprint(string $der): string
     {
-        return strtoupper(implode(':', str_split(hash('sha256', $der), 2)));
+        return strtoupper(implode(':', str_split(bin2hex(Crypto::sha256($der)), 2)));
     }
 
     /**

@@ -11,6 +11,9 @@
 
 namespace Webrtc\DTLS\DTLS;
 
+use danog\MadelineProto\Native\Hmac;
+use Webrtc\Srtp\Aes;
+
 /**
  * The TLS 1.2 pseudo-random function and the key schedule built on top of it.
  *
@@ -27,10 +30,19 @@ final class Prf
     /**
      * P_hash as defined in RFC 5246 section 5, using SHA-256.
      */
-    public static function pHash(string $secret, string $seed, int $length, string $algo = 'sha256'): string
+    public static function pHash(#[\SensitiveParameter] string $secret, string $seed, int $length, string $algo = 'sha256'): string
     {
         $result = '';
         $a = $seed;
+        if (($algo === 'sha256' || $algo === 'sha384') && Aes::nativeAvailable()) {
+            // The keyed state is set up once for all the blocks.
+            $hmac = new Hmac($algo, $secret);
+            while (\strlen($result) < $length) {
+                $a = $hmac->mac($a);
+                $result .= $hmac->mac($a.$seed);
+            }
+            return substr($result, 0, $length);
+        }
         while (\strlen($result) < $length) {
             $a = hash_hmac($algo, $a, $secret, true);
             $result .= hash_hmac($algo, $a.$seed, $secret, true);
@@ -41,7 +53,7 @@ final class Prf
     /**
      * PRF(secret, label, seed) as defined in RFC 5246 section 5.
      */
-    public static function prf(string $secret, string $label, string $seed, int $length, string $algo = 'sha256'): string
+    public static function prf(#[\SensitiveParameter] string $secret, string $label, string $seed, int $length, string $algo = 'sha256'): string
     {
         return self::pHash($secret, $label.$seed, $length, $algo);
     }
@@ -49,7 +61,7 @@ final class Prf
     /**
      * Derive the master secret from the pre-master secret and the two hello randoms.
      */
-    public static function masterSecret(string $preMasterSecret, string $clientRandom, string $serverRandom): string
+    public static function masterSecret(#[\SensitiveParameter] string $preMasterSecret, string $clientRandom, string $serverRandom): string
     {
         return self::prf(
             $preMasterSecret,
@@ -62,7 +74,7 @@ final class Prf
     /**
      * Derive the extended master secret of RFC 7627, which binds the handshake transcript.
      */
-    public static function extendedMasterSecret(string $preMasterSecret, string $handshakeHash): string
+    public static function extendedMasterSecret(#[\SensitiveParameter] string $preMasterSecret, string $handshakeHash): string
     {
         return self::prf(
             $preMasterSecret,
@@ -78,7 +90,7 @@ final class Prf
      * @return array{clientKey: string, serverKey: string, clientSalt: string, serverSalt: string}
      */
     public static function keyBlock(
-        string $masterSecret,
+        #[\SensitiveParameter] string $masterSecret,
         string $clientRandom,
         string $serverRandom,
         int $keyLength,
@@ -113,7 +125,7 @@ final class Prf
      *
      * @param bool $client Whether the Finished is the one sent by the client.
      */
-    public static function verifyData(string $masterSecret, string $handshakeHash, bool $client): string
+    public static function verifyData(#[\SensitiveParameter] string $masterSecret, string $handshakeHash, bool $client): string
     {
         return self::prf(
             $masterSecret,
@@ -127,7 +139,7 @@ final class Prf
      * Export keying material as defined in RFC 5705, used to key SRTP (RFC 5764).
      */
     public static function exportKeyingMaterial(
-        string $masterSecret,
+        #[\SensitiveParameter] string $masterSecret,
         string $label,
         string $clientRandom,
         string $serverRandom,

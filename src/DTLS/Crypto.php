@@ -11,12 +11,14 @@
 
 namespace Webrtc\DTLS\DTLS;
 
+use danog\MadelineProto\Native\Hash;
 use DateTimeImmutable;
 use phpseclib4\Crypt\EC;
 use phpseclib4\Crypt\RSA;
 use phpseclib4\File\X509;
 use Throwable;
 use Webrtc\DTLS\Exception\SSLException;
+use Webrtc\Srtp\Aes;
 
 /**
  * The certificate cryptography of the handshake: OpenSSL, or phpseclib if the extension isn't loaded.
@@ -41,6 +43,14 @@ final class Crypto
     public static function useOpenssl(): bool
     {
         return self::$backend !== self::BACKEND_PHPSECLIB && \extension_loaded('openssl');
+    }
+
+    /**
+     * The SHA-256 of some data: with madeline_crypto 0.5+, if loaded.
+     */
+    public static function sha256(string $data): string
+    {
+        return Aes::nativeAvailable() ? Hash::digest('sha256', $data) : hash('sha256', $data, true);
     }
 
     /**
@@ -113,7 +123,7 @@ final class Crypto
      *
      * @return string The certificate, in PEM form.
      */
-    public static function selfSign(EcPrivateKey $key, array $dn, int $days): string
+    public static function selfSign(#[\SensitiveParameter] EcPrivateKey $key, array $dn, int $days): string
     {
         $openssl = $key->getOpenssl();
         if ($openssl !== null) {
