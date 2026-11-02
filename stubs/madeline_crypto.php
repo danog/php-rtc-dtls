@@ -48,6 +48,26 @@ final class AesCtrKey
     }
 }
 
+final class AesCbc
+{
+    public static function encrypt(#[\SensitiveParameter] string $key, string $iv, string $data): string
+    {
+    }
+    public static function decrypt(#[\SensitiveParameter] string $key, string $iv, string $data): string
+    {
+    }
+}
+
+final class AesIge
+{
+    public static function encrypt(#[\SensitiveParameter] string $key, string $iv, string $data): string
+    {
+    }
+    public static function decrypt(#[\SensitiveParameter] string $key, string $iv, string $data): string
+    {
+    }
+}
+
 final class Hmac
 {
     /** @param 'md5'|'sha1'|'sha256'|'sha384'|'sha512' $algo */
@@ -77,37 +97,6 @@ final class Hash
     }
     /** @param 'md5'|'sha1'|'sha256'|'sha384'|'sha512' $algo */
     public static function digest(string $algo, string $data): string
-    {
-    }
-}
-
-final class Ec
-{
-    /** @return array{string, string} [PKCS#8 DER private key, SubjectPublicKeyInfo DER] */
-    public static function generateP256(): array
-    {
-    }
-    public static function derive(#[\SensitiveParameter] string $privateKey, string $peerSpki): string
-    {
-    }
-    public static function sign(#[\SensitiveParameter] string $privateKey, string $data, string $hash): string
-    {
-    }
-}
-
-final class Signature
-{
-    public static function verify(string $publicKeyOrCertificate, string $data, string $signature, string $hash): bool
-    {
-    }
-}
-
-final class X509
-{
-    public static function selfSigned(#[\SensitiveParameter] string $privateKey, string $commonName, int $days, int $serial): string
-    {
-    }
-    public static function publicKey(string $certificate): string
     {
     }
 }

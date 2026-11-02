@@ -12,8 +12,6 @@
 namespace Webrtc\DTLS\DTLS;
 
 use danog\MadelineProto\Native\Hash;
-use danog\MadelineProto\Native\Signature;
-use danog\MadelineProto\Native\X509 as NativeX509;
 use DateTimeImmutable;
 use phpseclib4\Crypt\EC;
 use phpseclib4\Crypt\RSA;
@@ -23,34 +21,24 @@ use Webrtc\DTLS\Exception\SSLException;
 use Webrtc\Srtp\Aes;
 
 /**
- * The certificate cryptography of the handshake: MadelineProto's madeline_crypto extension (0.5+), OpenSSL, or
- * phpseclib if neither extension is loaded.
+ * The certificate cryptography of the handshake: OpenSSL, or phpseclib if the extension isn't loaded.
  *
  * @internal
  */
 final class Crypto
 {
-    public const BACKEND_NATIVE = 'native';
     public const BACKEND_OPENSSL = 'openssl';
     public const BACKEND_PHPSECLIB = 'phpseclib';
 
     /**
-     * The backend to use, instead of the fastest available one (if available): for tests.
+     * The backend to use, instead of OpenSSL (if available): for tests.
      *
      * @var self::BACKEND_*|null
      */
     public static ?string $backend = null;
 
     /**
-     * Whether to use madeline_crypto.
-     */
-    public static function useNative(): bool
-    {
-        return (self::$backend === null || self::$backend === self::BACKEND_NATIVE) && Aes::nativeAvailable();
-    }
-
-    /**
-     * Whether to use OpenSSL (if not madeline_crypto).
+     * Whether to use OpenSSL.
      */
     public static function useOpenssl(): bool
     {
@@ -58,7 +46,7 @@ final class Crypto
     }
 
     /**
-     * The SHA-256 of some data.
+     * The SHA-256 of some data: with madeline_crypto 0.5+, if loaded.
      */
     public static function sha256(string $data): string
     {
@@ -91,13 +79,6 @@ final class Crypto
      */
     public static function verify(string $certificate, string $data, string $signature, string $hash): bool
     {
-        if (self::useNative()) {
-            try {
-                return Signature::verify($certificate, $data, $signature, $hash);
-            } catch (\ValueError $e) {
-                throw new SSLException('Could not verify the signature: '.$e->getMessage(), 0, $e);
-            }
-        }
         if (self::useOpenssl()) {
             $publicKey = openssl_pkey_get_public(self::pem('CERTIFICATE', $certificate));
             if ($publicKey === false) {
@@ -144,11 +125,6 @@ final class Crypto
      */
     public static function selfSign(EcPrivateKey $key, array $dn, int $days): string
     {
-        $native = $key->getNative();
-        if ($native !== null) {
-            // Only the common name: peers only check the fingerprint.
-            return self::pem('CERTIFICATE', NativeX509::selfSigned($native, $dn['CN'], $days, random_int(1, PHP_INT_MAX)));
-        }
         $openssl = $key->getOpenssl();
         if ($openssl !== null) {
             $csr = openssl_csr_new([

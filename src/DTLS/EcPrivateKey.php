@@ -11,7 +11,6 @@
 
 namespace Webrtc\DTLS\DTLS;
 
-use danog\MadelineProto\Native\Ec as NativeEc;
 use OpenSSLAsymmetricKey;
 use phpseclib4\Crypt\DH;
 use phpseclib4\Crypt\EC;
@@ -20,9 +19,8 @@ use Webrtc\DTLS\Exception\SSLException;
 /**
  * An EC private key: the certificate's, or an ephemeral ECDHE one.
  *
- * Backed by madeline_crypto 0.5+ (the key is then its PKCS#8 DER encoding), by OpenSSL, or by phpseclib if
- * neither extension is loaded (or OpenSSL fails, e.g. without an openssl.cnf on Windows): see
- * {@see Crypto::useNative()} and {@see Crypto::useOpenssl()}.
+ * Backed by OpenSSL, or by phpseclib if the extension isn't loaded (or fails, e.g. without an
+ * openssl.cnf on Windows): see {@see Crypto::useOpenssl()}.
  *
  * @internal
  */
@@ -31,14 +29,8 @@ final class EcPrivateKey
     /** The SubjectPublicKeyInfo of a P-256 point, up to the uncompressed point itself. */
     private const P256_SPKI_PREFIX = "3059301306072a8648ce3d020106082a8648ce3d030107034200";
 
-    /**
-     * @param OpenSSLAsymmetricKey|EC\PrivateKey|string $key  The key; a string is the PKCS#8 DER encoding of a native key.
-     * @param ?string                                   $spki The SubjectPublicKeyInfo of a native key, if known.
-     */
-    private function __construct(
-        #[\SensitiveParameter] private readonly OpenSSLAsymmetricKey|EC\PrivateKey|string $key,
-        private ?string $spki = null,
-    ) {
+    private function __construct(private readonly OpenSSLAsymmetricKey|EC\PrivateKey $key)
+    {
     }
 
     /**
@@ -46,10 +38,6 @@ final class EcPrivateKey
      */
     public static function generateP256(): self
     {
-        if (Crypto::useNative()) {
-            [$key, $spki] = NativeEc::generateP256();
-            return new self($key, $spki);
-        }
         if (Crypto::useOpenssl()) {
             $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
             if ($key !== false) {
@@ -64,23 +52,8 @@ final class EcPrivateKey
      *
      * @throws SSLException If it isn't an EC private key.
      */
-    public static function load(#[\SensitiveParameter] string $pem): self
+    public static function load(string $pem): self
     {
-        if (Crypto::useNative() && preg_match('#^\s*-----BEGIN PRIVATE KEY-----([A-Za-z0-9+/=\s]+)-----END PRIVATE KEY-----\s*$#D', $pem, $matches)) {
-            // PKCS#8, as exported by toPem() with any backend (a SEC 1 "EC PRIVATE KEY" is loaded by the others).
-            $der = base64_decode((string) preg_replace('#\s#', '', $matches[1]), true);
-            if ($der === false) {
-                throw new SSLException('The provided key is not valid PEM!');
-            }
-            $key = new self($der);
-            // Checks that it's a P-256 key, before it's used.
-            try {
-                $key->sign('');
-            } catch (\Throwable $e) {
-                throw new SSLException('The provided key is not a P-256 private key!', 0, $e);
-            }
-            return $key;
-        }
         if (Crypto::useOpenssl()) {
             $key = openssl_pkey_get_private($pem);
             if ($key !== false) {
@@ -102,15 +75,6 @@ final class EcPrivateKey
      */
     public function getPoint(): string
     {
-        if (\is_string($this->key)) {
-            // A loaded key's public key is computed by another backend: only certificate keys are loaded, and
-            // they only sign.
-            $this->spki ??= (string) hex2bin(self::P256_SPKI_PREFIX).$this->toPhpseclib()->getPublicKey()->getEncodedCoordinates();
-            if (\strlen($this->spki) !== 91 || strncmp($this->spki, (string) hex2bin(self::P256_SPKI_PREFIX), 26) !== 0) {
-                throw new SSLException('Could not get the EC public key!');
-            }
-            return substr($this->spki, 26);
-        }
         if ($this->key instanceof EC\PrivateKey) {
             /** @var string */
             return $this->key->getPublicKey()->getEncodedCoordinates();
@@ -132,14 +96,6 @@ final class EcPrivateKey
     public function computeSharedSecret(string $peerPoint): string
     {
         $spki = (string) hex2bin(self::P256_SPKI_PREFIX).$peerPoint;
-        if (\is_string($this->key)) {
-            // Loading the point checks that it is on the curve.
-            try {
-                return NativeEc::derive($this->key, $spki);
-            } catch (\Throwable $e) {
-                throw new SSLException('Invalid ECDHE public key!', 0, $e);
-            }
-        }
         if ($this->key instanceof EC\PrivateKey) {
             $peerKey = EC::loadPublicKey($spki);
             \assert($peerKey instanceof EC\PublicKey);
@@ -160,9 +116,6 @@ final class EcPrivateKey
      */
     public function sign(string $data): string
     {
-        if (\is_string($this->key)) {
-            return NativeEc::sign($this->key, $data, 'sha256');
-        }
         if ($this->key instanceof EC\PrivateKey) {
             /** @var string */
             return $this->key->withSignatureFormat('ASN1')->withHash('sha256')->sign($data);
@@ -179,9 +132,6 @@ final class EcPrivateKey
      */
     public function toPem(): string
     {
-        if (\is_string($this->key)) {
-            return Crypto::pem('PRIVATE KEY', $this->key);
-        }
         if ($this->key instanceof EC\PrivateKey) {
             return $this->key->toString('PKCS8');
         }
@@ -200,8 +150,6 @@ final class EcPrivateKey
         if ($this->key instanceof EC\PrivateKey) {
             return $this->key;
         }
-        // An unserialized key skips the initialization of the key formats of phpseclib, needed to load it.
-        EC::getSupportedKeyFormats();
         $key = EC::loadPrivateKey($this->toPem());
         \assert($key instanceof EC\PrivateKey);
         return $key;
@@ -216,22 +164,14 @@ final class EcPrivateKey
     }
 
     /**
-     * The PKCS#8 DER encoding of the key, if backed by madeline_crypto.
-     */
-    public function getNative(): ?string
-    {
-        return \is_string($this->key) ? $this->key : null;
-    }
-
-    /**
      * OpenSSL keys can't be serialized: the key is serialized in PEM form, and loaded back with whichever
      * backend is available then.
      *
-     * @return array{pem: string, spki?: string}
+     * @return array{pem: string}
      */
     public function __serialize(): array
     {
-        return $this->spki === null ? ['pem' => $this->toPem()] : ['pem' => $this->toPem(), 'spki' => $this->spki];
+        return ['pem' => $this->toPem()];
     }
 
     /**
@@ -243,9 +183,7 @@ final class EcPrivateKey
     public function __unserialize(array $data): void
     {
         if (isset($data['pem']) && \is_string($data['pem'])) {
-            $loaded = self::load($data['pem']);
-            $this->key = $loaded->key;
-            $this->spki = \is_string($loaded->key) && isset($data['spki']) && \is_string($data['spki']) ? $data['spki'] : $loaded->spki;
+            $this->key = self::load($data['pem'])->key;
             return;
         }
         $key = $data["\0".self::class."\0key"] ?? null;
@@ -254,8 +192,6 @@ final class EcPrivateKey
         }
         // An unserialized key skips the initialization of the key formats of phpseclib, needed to export it.
         EC::getSupportedKeyFormats();
-        $loaded = self::load($key->toString('PKCS8'));
-        $this->key = $loaded->key;
-        $this->spki = $loaded->spki;
+        $this->key = self::load($key->toString('PKCS8'))->key;
     }
 }

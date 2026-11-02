@@ -37,18 +37,10 @@ class CryptoTest extends TestCase
         Crypto::$backend = $this->previousBackend;
     }
 
-    /**
-     * The backends: madeline_crypto's only if the extension is loaded.
-     *
-     * @return list<string>
-     */
+    /** @return list<string> */
     private static function backends(): array
     {
-        $backends = [Crypto::BACKEND_OPENSSL, Crypto::BACKEND_PHPSECLIB];
-        if (\Webrtc\Srtp\Aes::nativeAvailable()) {
-            $backends[] = Crypto::BACKEND_NATIVE;
-        }
-        return $backends;
+        return [Crypto::BACKEND_OPENSSL, Crypto::BACKEND_PHPSECLIB];
     }
 
     /** @return iterable<string, array{string, string}> */
@@ -81,7 +73,6 @@ class CryptoTest extends TestCase
         $this->assertInstanceOf(EcPrivateKey::class, $unserialized);
         $this->assertSame($key->getPoint(), $unserialized->getPoint());
         $this->assertSame($b === Crypto::BACKEND_OPENSSL, $unserialized->getOpenssl() !== null);
-        $this->assertSame($b === Crypto::BACKEND_NATIVE, $unserialized->getNative() !== null);
     }
 
     #[DataProvider('backendPairs')]
