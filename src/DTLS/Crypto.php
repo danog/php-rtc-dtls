@@ -123,7 +123,7 @@ final class Crypto
      *
      * @return string The certificate, in PEM form.
      */
-    public static function selfSign(EcPrivateKey $key, array $dn, int $days): string
+    public static function selfSign(#[\SensitiveParameter] EcPrivateKey $key, array $dn, int $days): string
     {
         $openssl = $key->getOpenssl();
         if ($openssl !== null) {

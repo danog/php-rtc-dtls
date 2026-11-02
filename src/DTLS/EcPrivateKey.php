@@ -29,7 +29,7 @@ final class EcPrivateKey
     /** The SubjectPublicKeyInfo of a P-256 point, up to the uncompressed point itself. */
     private const P256_SPKI_PREFIX = "3059301306072a8648ce3d020106082a8648ce3d030107034200";
 
-    private function __construct(private readonly OpenSSLAsymmetricKey|EC\PrivateKey $key)
+    private function __construct(#[\SensitiveParameter] private readonly OpenSSLAsymmetricKey|EC\PrivateKey $key)
     {
     }
 
@@ -52,7 +52,7 @@ final class EcPrivateKey
      *
      * @throws SSLException If it isn't an EC private key.
      */
-    public static function load(string $pem): self
+    public static function load(#[\SensitiveParameter] string $pem): self
     {
         if (Crypto::useOpenssl()) {
             $key = openssl_pkey_get_private($pem);

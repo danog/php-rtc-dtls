@@ -90,7 +90,7 @@ final class RTCCertificate
     /**
      * @throws RTCCertificateException If the key or certificate cannot be parsed.
      */
-    private function load(string $privateKey, string $certificate): void
+    private function load(#[\SensitiveParameter] string $privateKey, string $certificate): void
     {
         try {
             $this->privateKey = EcPrivateKey::load($privateKey);

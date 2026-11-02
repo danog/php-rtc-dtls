@@ -87,7 +87,7 @@ final class RecordLayer
     /**
      * Install the keys produced by the handshake, without activating them yet.
      */
-    public function setKeys(#[\SensitiveParameter] string $writeKey, string $writeSalt, #[\SensitiveParameter] string $readKey, string $readSalt): void
+    public function setKeys(#[\SensitiveParameter] string $writeKey, #[\SensitiveParameter] string $writeSalt, #[\SensitiveParameter] string $readKey, #[\SensitiveParameter] string $readSalt): void
     {
         $this->writeKey = $writeKey;
         $this->writeSalt = $writeSalt;

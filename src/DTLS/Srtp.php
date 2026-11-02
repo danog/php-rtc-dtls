@@ -155,7 +155,7 @@ final class Srtp
      * @throws DTLSException If the profile is not set or key generation fails
      * @throws SrtpValidateException If the SRTP session creation fails
      */
-    public function getInbound(string $srtpKeyMaterial, int $index): Session
+    public function getInbound(#[\SensitiveParameter] string $srtpKeyMaterial, int $index): Session
     {
         return $this->getSession($srtpKeyMaterial, $index, SsrcType::ANY_INBOUND);
     }
@@ -169,7 +169,7 @@ final class Srtp
      * @throws DTLSException If the profile is not set or key generation fails
      * @throws SrtpValidateException If the SRTP session creation fails
      */
-    public function getOutbound(string $srtpKeyMaterial, int $index): Session
+    public function getOutbound(#[\SensitiveParameter] string $srtpKeyMaterial, int $index): Session
     {
         return $this->getSession($srtpKeyMaterial, $index, SsrcType::ANY_OUTBOUND);
     }
@@ -185,7 +185,7 @@ final class Srtp
      * @return string The generated SRTP key
      * @throws DTLSException If the profile is not set
      */
-    public function generateKey(string $srtpKeyMaterial, int $index): string
+    public function generateKey(#[\SensitiveParameter] string $srtpKeyMaterial, int $index): string
     {
         $profile = $this->profile;
         if ($profile === null) {
@@ -210,7 +210,7 @@ final class Srtp
      * @throws DTLSException If the profile is not set or key generation fails
      * @throws SrtpValidateException If the SRTP session creation fails
      */
-    private function getSession(string $srtpKeyMaterial, int $index, SsrcType $ssrcType): Session
+    private function getSession(#[\SensitiveParameter] string $srtpKeyMaterial, int $index, SsrcType $ssrcType): Session
     {
         $profile = $this->profile;
         if ($profile === null) {
