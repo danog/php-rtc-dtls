@@ -38,6 +38,8 @@ final class RecordLayer
     private const HEADER_LENGTH = 13;
     private const EXPLICIT_NONCE_LENGTH = 8;
     private const TAG_LENGTH = 16;
+    /** Size of the anti-replay window, in records: the bits of {@see self::$readWindow}. */
+    public const REPLAY_WINDOW = 64;
 
     /** Outgoing epoch, incremented by each ChangeCipherSpec we send. */
     private int $writeEpoch = 0;
@@ -62,11 +64,26 @@ final class RecordLayer
     private ?AesGcmKey $writeGcm = null;
     private ?AesGcmKey $readGcm = null;
 
-    /** Highest sequence number accepted per epoch, for replay detection.
-     *
-     * @var array<int, array<int, true>>
+    /**
+     * Highest sequence number of the authenticated records accepted in the current read epoch, for
+     * replay detection (null before the first one).
      */
-    private array $readSequences = [];
+    private ?int $readHighest = null;
+    /**
+     * The anti-replay sliding window of RFC 6347 section 4.1.2.6, of {@see self::REPLAY_WINDOW}
+     * records: bit i is set if the record {@see self::$readHighest} - i was accepted.
+     *
+     * A map of every sequence number ever accepted would grow with each record of the connection
+     * (the SCTP traffic of a data channel), for as long as it lasts.
+     */
+    private int $readWindow = 0;
+    /**
+     * The sequence numbers of the unauthenticated records (epoch 0) accepted so far, at most
+     * {@see self::REPLAY_WINDOW}: they can't move the window, see {@see self::decode()}.
+     *
+     * @var array<int, true>
+     */
+    private array $plainSequences = [];
 
     /**
      * Mask applied to the record sequence to derive the explicit AEAD nonce.
@@ -111,6 +128,10 @@ final class RecordLayer
     public function activateRead(): void
     {
         $this->readEpoch++;
+        // Sequence numbers start over in each epoch, and records of the previous ones are dropped.
+        $this->readHighest = null;
+        $this->readWindow = 0;
+        $this->plainSequences = [];
     }
 
     public function getWriteEpoch(): int
@@ -191,12 +212,22 @@ final class RecordLayer
                 // one; both are safe to ignore, the peer will retransmit if it matters.
                 continue;
             }
-            if (isset($this->readSequences[$epoch][$sequence])) {
-                continue;
-            }
-            $this->readSequences[$epoch][$sequence] = true;
-
             if ($epoch === 0 || $this->readKey === null) {
+                // Unauthenticated: anyone able to spoof the peer's address can send these, so they
+                // must not move the window (a huge sequence number would make every genuine record
+                // look too old). Only exact duplicates are dropped, from a bounded set; the handshake
+                // copes with the retransmissions an evicted entry lets through.
+                if (isset($this->plainSequences[$sequence])) {
+                    continue;
+                }
+                if (\count($this->plainSequences) >= self::REPLAY_WINDOW) {
+                    // The oldest one.
+                    foreach ($this->plainSequences as $oldest => $_) {
+                        unset($this->plainSequences[$oldest]);
+                        break;
+                    }
+                }
+                $this->plainSequences[$sequence] = true;
                 $records[] = ['type' => $type, 'payload' => $body, 'epoch' => $epoch];
                 if ($type === self::TYPE_CHANGE_CIPHER_SPEC) {
                     // The epoch has to advance right here: peers routinely put ChangeCipherSpec
@@ -207,6 +238,9 @@ final class RecordLayer
                 continue;
             }
 
+            if ($this->isReplay($sequence)) {
+                continue;
+            }
             if ($length < self::EXPLICIT_NONCE_LENGTH + self::TAG_LENGTH) {
                 continue;
             }
@@ -226,11 +260,43 @@ final class RecordLayer
                 // A forged or corrupted record; silently discard it.
                 continue;
             }
+            // Only once authenticated (RFC 6347 section 4.1.2.6): a forged record must not move
+            // the window, which would make the genuine ones look too old.
+            $this->markRead($sequence);
 
             $records[] = ['type' => $type, 'payload' => $plaintext, 'epoch' => $epoch];
         }
 
         return $records;
+    }
+
+    /**
+     * Whether a record of the current read epoch was already accepted, or is too old to tell.
+     */
+    private function isReplay(int $sequence): bool
+    {
+        if ($this->readHighest === null || $sequence > $this->readHighest) {
+            return false;
+        }
+        $age = $this->readHighest - $sequence;
+        return $age >= self::REPLAY_WINDOW || ($this->readWindow >> $age & 1) === 1;
+    }
+
+    /**
+     * Record that a record of the current read epoch was accepted, sliding the window forward.
+     */
+    private function markRead(int $sequence): void
+    {
+        if ($this->readHighest === null) {
+            $this->readHighest = $sequence;
+            $this->readWindow = 1;
+        } elseif ($sequence > $this->readHighest) {
+            $shift = $sequence - $this->readHighest;
+            $this->readWindow = $shift >= self::REPLAY_WINDOW ? 1 : $this->readWindow << $shift | 1;
+            $this->readHighest = $sequence;
+        } else {
+            $this->readWindow |= 1 << ($this->readHighest - $sequence);
+        }
     }
 
     /**
