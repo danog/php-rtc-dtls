@@ -674,7 +674,8 @@ final class RTCDtlsTransport implements RTCRTPDtlsTransportInterface, TransportS
      */
     public function getStats(): RTCStatsReport
     {
-        $this->reportTransport->dateTime = new \DateTimeImmutable();
+        $this->reportTransport->timestamp = microtime(true) * 1000.0;
+        unset($this->reportTransport->dateTime);
 
         $report = new RTCStatsReport();
         $report->add($this->reportTransport);

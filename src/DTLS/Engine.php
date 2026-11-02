@@ -613,7 +613,7 @@ final class Engine
         );
         // The message we just received was sent by the peer: a server validates the client's
         // Finished, and vice versa.
-        $expected = Prf::verifyData($this->masterSecret, hash('sha256', $transcript, true), $this->isServer);
+        $expected = Prf::verifyData($this->masterSecret, Crypto::sha256($transcript), $this->isServer);
         if (!hash_equals($expected, $body)) {
             throw new SSLException('The peer sent an invalid Finished message!');
         }
@@ -652,7 +652,7 @@ final class Engine
             $flight[] = [RecordLayer::TYPE_CHANGE_CIPHER_SPEC, "\x01", $this->records->getWriteEpoch()];
             $this->records->activateWrite();
 
-            $body = Prf::verifyData($this->masterSecret, hash('sha256', $this->transcript, true), !$this->isServer);
+            $body = Prf::verifyData($this->masterSecret, Crypto::sha256($this->transcript), !$this->isServer);
             $seq = $this->writeMessageSeq++;
             $this->transcript .= Handshake::transcriptForm(Handshake::FINISHED, $body, $seq);
             foreach (Handshake::fragment(Handshake::FINISHED, $body, $seq) as $fragment) {
@@ -680,7 +680,7 @@ final class Engine
         $preMasterSecret = $this->ecdhePrivate->computeSharedSecret($peerPoint);
 
         $masterSecret = $this->extendedMasterSecret
-            ? Prf::extendedMasterSecret($preMasterSecret, hash('sha256', $sessionTranscript, true))
+            ? Prf::extendedMasterSecret($preMasterSecret, Crypto::sha256($sessionTranscript))
             : Prf::masterSecret($preMasterSecret, $this->clientRandom, $this->serverRandom);
 
         $keys = Prf::keyBlock(

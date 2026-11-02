@@ -132,7 +132,7 @@ final class RTCCertificate
      */
     public static function fingerprint(string $der): string
     {
-        return strtoupper(implode(':', str_split(hash('sha256', $der), 2)));
+        return strtoupper(implode(':', str_split(bin2hex(Crypto::sha256($der)), 2)));
     }
 
     /**

@@ -15,6 +15,9 @@ use Webrtc\DTLS\DTLS\EcPrivateKey;
  */
 #[CoversClass(Crypto::class)]
 #[CoversClass(EcPrivateKey::class)]
+#[CoversClass(\Webrtc\DTLS\DTLS\Prf::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Webrtc\DTLS\DTLS\RTCCertificate::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Webrtc\Srtp\Aes::class)]
 class CryptoTest extends TestCase
 {
     private const DN = ['C' => 'US', 'ST' => 'Virginia', 'L' => 'Reston', 'O' => 'PHP WebRTC', 'CN' => 'webrtc.php'];
@@ -34,11 +37,25 @@ class CryptoTest extends TestCase
         Crypto::$backend = $this->previousBackend;
     }
 
+    /**
+     * The backends: madeline_crypto's only if the extension is loaded.
+     *
+     * @return list<string>
+     */
+    private static function backends(): array
+    {
+        $backends = [Crypto::BACKEND_OPENSSL, Crypto::BACKEND_PHPSECLIB];
+        if (\Webrtc\Srtp\Aes::nativeAvailable()) {
+            $backends[] = Crypto::BACKEND_NATIVE;
+        }
+        return $backends;
+    }
+
     /** @return iterable<string, array{string, string}> */
     public static function backendPairs(): iterable
     {
-        foreach ([Crypto::BACKEND_OPENSSL, Crypto::BACKEND_PHPSECLIB] as $a) {
-            foreach ([Crypto::BACKEND_OPENSSL, Crypto::BACKEND_PHPSECLIB] as $b) {
+        foreach (self::backends() as $a) {
+            foreach (self::backends() as $b) {
                 yield "$a, then $b" => [$a, $b];
             }
         }
@@ -64,6 +81,7 @@ class CryptoTest extends TestCase
         $this->assertInstanceOf(EcPrivateKey::class, $unserialized);
         $this->assertSame($key->getPoint(), $unserialized->getPoint());
         $this->assertSame($b === Crypto::BACKEND_OPENSSL, $unserialized->getOpenssl() !== null);
+        $this->assertSame($b === Crypto::BACKEND_NATIVE, $unserialized->getNative() !== null);
     }
 
     #[DataProvider('backendPairs')]
@@ -101,7 +119,7 @@ class CryptoTest extends TestCase
     /** @return iterable<string, array{string, string}> */
     public static function backendsAndHashes(): iterable
     {
-        foreach ([Crypto::BACKEND_OPENSSL, Crypto::BACKEND_PHPSECLIB] as $backend) {
+        foreach (self::backends() as $backend) {
             foreach (['sha1', 'sha256', 'sha384'] as $hash) {
                 yield "$backend, $hash" => [$backend, $hash];
             }
@@ -131,9 +149,30 @@ class CryptoTest extends TestCase
         $this->assertFalse(self::with($backend, static fn () => Crypto::verify($der, 'other data', (string) $signature, $hash)));
     }
 
+    /** The fingerprint is the SHA-256 of the DER encoding, whatever the backend. */
+    public function testTheFingerprintIsTheSha256OfTheDer(): void
+    {
+        $der = random_bytes(500);
+        $this->assertSame(hash('sha256', $der, true), Crypto::sha256($der));
+        $this->assertSame(
+            strtoupper(implode(':', str_split(hash('sha256', $der), 2))),
+            \Webrtc\DTLS\DTLS\RTCCertificate::fingerprint($der),
+        );
+    }
+
+    /** RFC 5246's PRF (P_SHA256), natively or not, against a known vector. */
+    public function testPrf(): void
+    {
+        // https://mailarchive.ietf.org/arch/msg/tls/fzVCzk-z3FShgGJ6DOXqM1ydxms/
+        $this->assertSame(
+            'e3f229ba727be17b8d122620557cd453c2aab21d07c3d495329b52d4e61edb5a6b301791e90d35c9c9a46b4e14baf9af0fa022f7077def17abfd3797c0564bab4fbc91666e9def9b97fce34f796789baa48082d122ee42c5a72e5a5110fff70187347b66',
+            bin2hex(\Webrtc\DTLS\DTLS\Prf::prf(hex2bin('9bbe436ba940f017b17652849a71db35'), 'test label', hex2bin('a0ba9f936cda311827a6f796ffd5198c'), 100)),
+        );
+    }
+
     public function testAnInvalidEcdhPointIsRejected(): void
     {
-        foreach ([Crypto::BACKEND_OPENSSL, Crypto::BACKEND_PHPSECLIB] as $backend) {
+        foreach (self::backends() as $backend) {
             $key = self::with($backend, EcPrivateKey::generateP256(...));
             $point = $key->getPoint();
             // Off the curve.

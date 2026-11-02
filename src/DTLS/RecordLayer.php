@@ -12,7 +12,7 @@
 namespace Webrtc\DTLS\DTLS;
 
 use Webrtc\DTLS\Exception\SSLException;
-use Webrtc\Srtp\Aes;
+use Webrtc\Srtp\AesGcmKey;
 use Throwable;
 
 /**
@@ -58,6 +58,9 @@ final class RecordLayer
     private ?string $writeSalt = null;
     private ?string $readKey = null;
     private ?string $readSalt = null;
+    /** The keys above, set up once (not saved by older versions). */
+    private ?AesGcmKey $writeGcm = null;
+    private ?AesGcmKey $readGcm = null;
 
     /** Highest sequence number accepted per epoch, for replay detection.
      *
@@ -84,12 +87,13 @@ final class RecordLayer
     /**
      * Install the keys produced by the handshake, without activating them yet.
      */
-    public function setKeys(string $writeKey, string $writeSalt, string $readKey, string $readSalt): void
+    public function setKeys(#[\SensitiveParameter] string $writeKey, string $writeSalt, #[\SensitiveParameter] string $readKey, string $readSalt): void
     {
         $this->writeKey = $writeKey;
         $this->writeSalt = $writeSalt;
         $this->readKey = $readKey;
         $this->readSalt = $readSalt;
+        $this->writeGcm = $this->readGcm = null;
     }
 
     /**
@@ -146,7 +150,7 @@ final class RecordLayer
         // sequence number, not from the explicit nonce carried in the payload.
         $aad = self::sequence($epoch, $sequence).\chr($type).$version.pack('n', \strlen($payload));
 
-        $ciphertext = Aes::gcmEncrypt($this->writeKey, $nonce, $aad, $payload);
+        $ciphertext = ($this->writeGcm ??= new AesGcmKey($this->writeKey))->encrypt($nonce, $aad, $payload);
 
         $body = $explicit.$ciphertext;
         return \chr($type).$version.self::sequence($epoch, $sequence)
@@ -214,7 +218,7 @@ final class RecordLayer
 
             \assert($this->readSalt !== null);
             try {
-                $plaintext = Aes::gcmDecrypt($this->readKey, $this->readSalt.$explicit, $aad, $ciphertext, $tag);
+                $plaintext = ($this->readGcm ??= new AesGcmKey($this->readKey))->decrypt($this->readSalt.$explicit, $aad, $ciphertext, $tag);
             } catch (Throwable) {
                 $plaintext = false;
             }

@@ -2,3 +2,4 @@
 tests/ export-ignore
 *.md export-ignore
 vendor-bin/ export-ignore
+stubs/ export-ignore
